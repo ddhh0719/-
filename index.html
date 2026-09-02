@@ -955,6 +955,21 @@
   // ceiling (never a lock — the league can always have a stronger year than expected), and
   // comfortably below still keeps a small (~1-2%) chance alive, because a .300 season can
   // still win a weak-league batting title every once in a great while.
+  // Renders a player's full award history as one pill PER AWARD TYPE with a total count
+  // ("도루왕 5회") instead of one pill per individual year ("3년 도루왕", "4년 도루왕", "7년 도루왕", ...)
+  // — a long career can rack up the same award many times over, and a wall of near-duplicate
+  // pills differing only by year was hard to read at a glance. Order follows each award's first
+  // occurrence so the list still reads roughly chronologically by "when this became a thing".
+  function renderAwardPills(awardsAll){
+    var counts={}, order=[];
+    (awardsAll||[]).forEach(function(a){
+      if(counts[a.name]===undefined){ counts[a.name]=0; order.push(a.name); }
+      counts[a.name]++;
+    });
+    return order.map(function(name){
+      return '<span class="award-pill">'+esc(name)+(counts[name]>1?' '+counts[name]+'회':'')+'</span>';
+    }).join('');
+  }
   function awardChance(value, threshold, span, higherIsBetter){
     var diff = higherIsBetter ? (value-threshold) : (threshold-value);
     var z = diff/(span||1);
@@ -1043,17 +1058,34 @@
   function militaryUnresolved(player){
     return !player.militaryExempt && !player.militaryServed && !player.militaryServing;
   }
+  // The random offset here (0-3 years) is what makes some careers get 3 shots at the tournament
+  // before the age-28 deadline and others only 2 — a fixed debut year would put EVERY player on
+  // the exact same 4-year phase, so everyone would always get the same count. With age 19-28 (a
+  // 10-year window) against a 4-year cycle, a 0 or 1 year offset lines up 3 tournament years
+  // inside that window; a 2 or 3 year offset only fits 2 — "some are just unlucky with the
+  // timing," same as a real player's draft year landing awkwardly relative to the real Asian
+  // Games calendar.
+  function rollMilitaryDebutYear(){
+    return MILITARY_TOURNAMENT_BASE_YEAR - randInt(0,3);
+  }
   function initMilitaryFields(player){
     if(player.militaryExempt===undefined) player.militaryExempt=false;
     if(player.militaryServed===undefined) player.militaryServed=false;
     if(player.militaryServing===undefined) player.militaryServing=false;
     if(player.militaryServiceYearsLeft===undefined) player.militaryServiceYearsLeft=0;
     // Best-effort backfill for saves created before this feature existed — puts them on a
-    // plausible cycle rather than leaving debutYear undefined forever.
-    if(player.debutYear===undefined) player.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2;
+    // random plausible cycle rather than leaving debutYear undefined forever.
+    if(player.debutYear===undefined) player.debutYear=rollMilitaryDebutYear();
   }
   function militaryTournamentName(year){
     return year+'년 아시안게임';
+  }
+  // How many seasons remain until the next tournament year (0 if this season IS one), and what
+  // year/name that tournament is — used for the "D-N년" countdown shown while unresolved.
+  function nextMilitaryTournamentInfo(player){
+    var year=militaryLeagueYear(player);
+    while(!isMilitaryTournamentYear(year)) year++;
+    return { year:year, yearsLeft:year-militaryLeagueYear(player), name:militaryTournamentName(year) };
   }
   function militaryStatusLabel(player){
     if(player.militaryExempt) return '면제 (국제대회 금메달)';
@@ -1062,27 +1094,47 @@
       return '상무 복무 중 (남은 '+left+'년)';
     }
     if(player.militaryServed) return '군필 (상무 복무 완료)';
+    if(player.age<MILITARY_FORCE_AGE){
+      var info=nextMilitaryTournamentInfo(player);
+      if(info.yearsLeft<=0) return '미해결 — '+info.name+' 개최 시즌';
+      return '미해결 — 다음 '+info.name.replace(/^\d+년\s*/,'')+'까지 D-'+info.yearsLeft;
+    }
     return '미해결 (만 '+MILITARY_FORCE_AGE+'세까지)';
   }
   // Built fresh each season and, when it fires, prepended to that season's event queue — reuses
   // the exact same prompt/choices/resolve shape as EVENT_POOL so it runs through the same event
   // UI with no special-cased rendering. Selection chance scales with OVR (better players are
   // more likely to make the roster); even a selected player isn't guaranteed gold — it's a team
-  // result, not a personal stat line.
+  // result, not a personal stat line. When a tournament year comes around but the roll says the
+  // player wasn't selected, that's surfaced as its own short notice instead of just silently
+  // doing nothing — otherwise a tournament year could pass with zero visible acknowledgment that
+  // it even happened, and the player would have no way to tell "not selected" apart from "not a
+  // tournament year at all".
   function buildMilitaryTournamentEvent(player){
     if(!militaryUnresolved(player)) return null;
     if(player.age<19 || player.age>30) return null;
     var year=militaryLeagueYear(player);
     if(!isMilitaryTournamentYear(year)) return null;
-    var selectChance=clamp((overall(player)-58)/50, 0.05, 0.9);
-    if(Math.random()>=selectChance) return null;
     var name=militaryTournamentName(year);
+    var selectChance=clamp((overall(player)-58)/50, 0.05, 0.9);
+    if(Math.random()>=selectChance){
+      return {
+        id:'military_tournament_missed',
+        condition:function(){ return true; },
+        prompt:function(pp){ return name+' 국가대표팀 명단이 발표되었습니다.'; },
+        choices:[
+          { label:'명단을 확인한다', resolve:function(pp, ctx){
+              return '아쉽게도 이번 '+name+' 대표팀 명단에는 포함되지 못했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
+            }}
+        ]
+      };
+    }
     return {
       id:'military_tournament',
       condition:function(){ return true; },
-      prompt:function(pp){ return name+' 국가대표팀 차출 제안이 왔습니다. 금메달을 따내면 병역 면제 혜택을 받습니다.'; },
+      prompt:function(pp){ return name+' 국가대표팀에 선발되었습니다. 참가해서 금메달을 따내면 병역 면제 혜택을 받습니다. 참가하시겠습니까?'; },
       choices:[
-        { label:'주전으로 전력을 다해 출전한다', resolve:function(pp, ctx){
+        { label:'참가한다 — 주전으로 전력을 다해 출전', resolve:function(pp, ctx){
             ctx.injuryRiskDelta += 0.10;
             var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75);
             if(Math.random()<goldChance){
@@ -1095,7 +1147,7 @@
             adjustFan(pp, 6);
             return '대표팀에서 최선을 다했지만 금메달 획득에는 실패했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
           }},
-        { label:'부담을 줄이며 백업으로 참가한다', resolve:function(pp, ctx){
+        { label:'참가한다 — 부담을 줄이며 백업으로', resolve:function(pp, ctx){
             ctx.injuryRiskDelta += 0.03;
             var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75)*0.7;
             if(Math.random()<goldChance){
@@ -1106,6 +1158,9 @@
             }
             adjustFan(pp, 3);
             return '무리하지 않고 대표팀 일정을 소화했지만, 금메달 획득에는 실패했습니다.';
+          }},
+        { label:'고사한다 — 이번엔 대표팀에 합류하지 않는다', resolve:function(pp, ctx){
+            return '몸 상태 관리를 이유로 이번 '+name+' 대표팀 합류를 고사했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
           }}
       ]
     };
@@ -3066,7 +3121,7 @@
 
     if(p.awardsAll && p.awardsAll.length){
       html += '<hr class="divider"><h3 style="font-size:17px;">수상 내역</h3><div>'+
-        p.awardsAll.map(function(a){ return '<span class="award-pill">'+a.year+'년 '+a.name+'</span>'; }).join('')+
+        renderAwardPills(p.awardsAll)+
       '</div>';
     }
 
@@ -3188,7 +3243,7 @@
 
     if(p.awardsAll && p.awardsAll.length){
       html += '<h3 style="font-size:17px;">수상 내역</h3><div style="margin-bottom:10px;">'+
-        p.awardsAll.map(function(a){ return '<span class="award-pill">'+a.year+'년 '+a.name+'</span>'; }).join('')+
+        renderAwardPills(p.awardsAll)+
       '</div>';
     }
 
@@ -3872,7 +3927,7 @@
       p.team=randomTeam;
       p.salary=startingSalary({drafted:false});
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
-      p.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2; // anchors the military tournament cycle to a real year at debut
+      p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
       initMilitaryFields(p);
       state.screen='hub'; state.hubTab='player';
       saveGame();
@@ -3883,7 +3938,7 @@
       p.draftInfo=state.draftResult;
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
       p.totalEarnings=(p.totalEarnings||0)+(state.draftResult.bonus||0);
-      p.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2; // anchors the military tournament cycle to a real year at debut
+      p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
       initMilitaryFields(p);
       state.screen='hub'; state.hubTab='player';
       saveGame();
