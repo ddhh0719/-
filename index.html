@@ -1435,10 +1435,27 @@
   // 33 just from sheer volume, even with a lower per-attempt success chance. Full attempts
   // through the real prime, then cut off hard so the extra budget can't drag the peak later.
   // The ceiling a stat can reach through the GENERAL growth channel alone (finalizeSeasonEvents)
-  // when it is NOT the player's chosen growth focus. Only a dedicated single-stat focus can push
-  // a stat past this, up to 99 — this is what keeps "focus on one thing" meaningfully different
-  // from "everything drifts up together".
-  var NON_FOCUS_STAT_CAP = 85;
+  // when it is NOT the player's CURRENT growth focus — this covers both "never focused this stat
+  // at all" (pure balanced play) and "focus was on this stat before but has since moved to a
+  // different one" (that earlier growth already happened and simply isn't erased; this cap just
+  // stops FURTHER general-channel growth on it going forward). Only a stat that IS the current
+  // focus can be pushed past this, up to 99, via applyPermanentStatDelta's default cap — this is
+  // what keeps "focus on one thing" meaningfully different from "everything drifts up together",
+  // and what lets a player who switches focus between stats over a career (power for a few
+  // seasons, then contact) push EACH of those stats up while it was the active focus.
+  var NON_FOCUS_STAT_CAP_MIN = 80;
+  var NON_FOCUS_STAT_CAP_MAX = 85;
+  // Rather than one flat ceiling shared by every non-focus stat (which made every specialist's
+  // "other" stats converge on the exact same number, reading as identical builds), each player
+  // gets their own per-stat ceiling rolled once in this 80-85 band and remembered from then on —
+  // a small, consistent difference in "natural ability" across their non-focus stats instead of
+  // everything hitting one uniform wall. Lazy + memoized so it works for saves from before this
+  // existed and never re-rolls once set.
+  function nonFocusStatCap(player, key){
+    if(!player.statCapRoll) player.statCapRoll={};
+    if(player.statCapRoll[key]===undefined) player.statCapRoll[key]=randInt(NON_FOCUS_STAT_CAP_MIN, NON_FOCUS_STAT_CAP_MAX);
+    return player.statCapRoll[key];
+  }
   function ageGrowthAttemptTaper(age){
     if(age===undefined || age===null) return 1;
     if(age<=30) return 1;
@@ -3385,8 +3402,17 @@
     // 90s, which flattened the whole point of picking a focus and made builds feel identical.
     // A growth focus is now the ONLY path to 99 in a given stat — this general channel still
     // touches every stat (so overall OVR keeps climbing for everyone), but any stat that ISN'T
-    // the current focus is capped at NON_FOCUS_STAT_CAP through this channel specifically, so a
-    // committed specialist still reads as clearly better in their one stat than everywhere else.
+    // the CURRENT focus is capped through this channel specifically (nonFocusStatCap, 80-85,
+    // rolled per player per stat) so a committed specialist still reads as clearly better in
+    // their one stat than everywhere else. This also applies with no focus set at all (pure
+    // balanced play) — every stat is "non-focus" in that case, so all five land in that same
+    // 80-85 band instead of the general channel being free to run all the way to 99.
+    // Retuned again (2026-09, Phase 9): a flat 85 cap made every specialist's OFF stats converge
+    // on the exact same number every time, and gave no way for a mid-career focus SWITCH (power
+    // for a while, then contact) to read as different from having focused on just one stat the
+    // whole time — switching should still let each stat you actually focused reach up toward 99
+    // while it was current, without every other stat clustering on one identical wall. Both
+    // fixed by nonFocusStatCap's per-player-per-stat roll instead of one shared constant.
     // Same raw-floor-then-taper structure as focusAttempts above, and for the same reason: the
     // channel needs a real floor during the prime (so a build reliably climbs to its 80+ OVR
     // target) WITHOUT that floor re-asserting itself after taper and guaranteeing a season
@@ -3403,7 +3429,7 @@
     var growthPoints = roundClamp(growthPointsRaw*ageTaper, 0, 24);
     for(var gi=0; gi<growthPoints; gi++){
       var gKey=pick(growthKeys);
-      var gCap = (focusKey && gKey!==focusKey) ? NON_FOCUS_STAT_CAP : 99;
+      var gCap = (focusKey && gKey===focusKey) ? 99 : nonFocusStatCap(p, gKey);
       applyPermanentStatDelta(p, gKey, 1, 0, gCap);
     }
     if(growthPoints>=2) hi.push('좋은 활약 덕분에 다른 능력치도 눈에 띄게 성장했습니다.');
@@ -3423,7 +3449,10 @@
     if(Math.random()<0.08){
       var breakKey=focusKey || pick(growthKeys);
       var breakAmt=randInt(4,8);
-      p.stats[breakKey]=roundClamp(p.stats[breakKey]+breakAmt,10,99);
+      // Same cap rule as the general channel above — a lucky breakthrough on a non-focus stat
+      // shouldn't be able to blow past that stat's own 80-85 ceiling and undercut it.
+      var breakCap=(focusKey && breakKey===focusKey) ? 99 : nonFocusStatCap(p, breakKey);
+      p.stats[breakKey]=roundClamp(p.stats[breakKey]+breakAmt,10,breakCap);
       var breakLabel=growthList.filter(function(s){ return s.key===breakKey; })[0].label;
       hi.push('예상치 못한 계기로 '+breakLabel+' 능력이 폭발적으로 성장했습니다! (+'+breakAmt+')');
     }
