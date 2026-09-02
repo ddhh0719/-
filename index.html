@@ -580,7 +580,7 @@
   var PITCHER_SUBROLES = ['선발','불펜','마무리'];
 
   var STAT_FLOOR = 10;          // minimum any starting stat can be brought down to
-  var ALLOC_BUDGET = 220;       // total points a new player distributes across their 5 starting stats
+  var ALLOC_BUDGET = 200;       // total points a new player distributes across their 5 starting stats
   var CREATE_STAT_CAP = 70;     // no stat can start above this — growth has to be earned in the pros
 
   /* ---------------- core formulas ---------------- */
@@ -825,48 +825,59 @@
     var bb=Math.round(ip/9*bb9);
     var h=Math.max(0,Math.round(ip*(1.16-(s.control/99)*0.26-(s.velocity/99)*0.10)+rand(-3,3)));
     var er=Math.round(era*ip/9);
-    var winPct=clamp(0.5+(ovr-50)/150+rand(-0.1,0.1),0.15,0.85);
     // How THIS season actually went, from the ERA that was just rolled — not the player's
     // static overall rating. A closer who happened to have a rough year on the mound has to
     // actually pitch worse in the results (fewer/blown saves), and a card-carrying ace who
-    // ran hot gets rewarded — decisions, saves and holds all key off this instead of ovr
-    // alone, so results track the season that actually happened, not just the player sheet.
-    // era 3.6 is "average", 1.4 (min) is elite, 9.5 (max) is disastrous.
-    var performanceFactor=clamp((3.6-era)/2.6,-1,1);
+    // ran hot gets rewarded — decisions, saves, holds AND win rate all key off this instead
+    // of ovr alone, so results track the season that actually happened, not just the player
+    // sheet. era 3.6 is "average" (matches this formula's own typical output), 1.4 (min) is
+    // elite, 9.5 (max) is disastrous.
+    // Retuned again (2026-09, realism pass): the previous version let a merely-average season
+    // (performanceFactor==0) still produce a ~20-save year for a closer, because the OVR-only
+    // baseline term was doing most of the work on its own — an ERA-3-point-something closer
+    // pulling 28 saves was exactly the complaint. performanceFactor's weight is now the DOMINANT
+    // term in every save/win/hold rate below, and the flat ovr/baseline terms are cut down hard,
+    // so an average-ERA season lands in the low-to-mid teens for saves, a rough year (era 4.5+)
+    // drops into single digits (the team stops trusting them with the job), and only a genuinely
+    // excellent year (era well under 3.00) climbs toward the 30s-40s a real ace closer season
+    // reaches (KBO's single-season save record is 47).
+    var performanceFactor=clamp((3.6-era)/2.6,-1,1.2);
+    var winPct=clamp(0.5+(ovr-50)/220+performanceFactor*0.16+rand(-0.07,0.07),0.10,0.88);
     // Role shapes the decision profile as much as skill does — a closer simply doesn't get
     // the decisions (or the wins) a starter accumulates, no matter how sharp their stuff is.
     var isCloser = player.subrole==='마무리';
     var decisions, wins, losses, saves, holds;
     if(player.subrole==='선발'){
-      decisions=Math.round(gamesCount*0.80*rand(0.9,1.1));
-      wins=Math.round(decisions*clamp(winPct+performanceFactor*0.08,0.08,0.92));
+      // Decision rate trimmed from 0.80 to 0.62 — a real starter doesn't factor into a decision
+      // in every outing (no-decisions from early exits/bullpen games are common), and winPct
+      // above already folds in performanceFactor so this season's actual ERA (not just the
+      // player's static rating) drives how many of those decisions go in the win column.
+      decisions=Math.round(gamesCount*0.62*rand(0.88,1.12));
+      wins=Math.round(decisions*clamp(winPct,0.08,0.92));
       losses=Math.max(0,decisions-wins);
       saves=0; holds=0;
     } else if(isCloser){
       // A bad season means more blown-save situations turning into decisions, not the same
       // fixed decision count every year.
-      decisions=Math.round(gamesCount*(0.14+Math.max(0,-performanceFactor)*0.07)*rand(0.85,1.15));
-      wins=Math.min(9, Math.round(decisions*clamp(winPct*0.45+performanceFactor*0.10,0.05,0.7))); // most closer decisions are blown-save losses, not wins
+      decisions=Math.round(gamesCount*(0.12+Math.max(0,-performanceFactor)*0.09)*rand(0.85,1.15));
+      wins=Math.min(8, Math.round(decisions*clamp(winPct*0.4,0.03,0.65))); // most closer decisions are blown-save losses, not wins
       losses=Math.max(0,decisions-wins);
-      // Save conversion now leans heavily on how the season actually went (performanceFactor,
-      // from this year's ERA) rather than just the player's static rating — an ERA well over
-      // 3 for a closer can no longer coexist with a huge save total the way it used to, and a
+      // Save conversion now leans almost entirely on how the season actually went
+      // (performanceFactor, from this year's ERA) — the flat baseline+ovr terms are small,
+      // so an ERA well over 3 for a closer can no longer coexist with a big save total, and a
       // shaky year now visibly costs saves even if the underlying stats didn't change.
-      var saveRate=clamp(0.28+(ovr/99)*0.20+performanceFactor*0.32,0.14,0.85);
+      var saveRate=clamp(0.07+(ovr/99)*0.09+performanceFactor*0.46,0.02,0.85);
       saves=Math.round(gamesCount*saveRate);
       holds=0; // holds are a setup-man stat — a closer's outings are save situations, not hold situations
     } else {
       // A setup reliever's headline number should be holds, not wins — a win is mostly the
       // product of whichever inning the offense happens to take the lead in, not something
-      // this role should accumulate the way a starter does. Decisions/win-rate trimmed down
-      // (was 20% of games at 0.85x winPct — routinely out-earning saves+holds combined) and
-      // holds added as the real workhorse-reliever stat, scaling with quality like saves does
-      // for a closer.
+      // this role should accumulate the way a starter does.
       decisions=Math.round(gamesCount*0.12*rand(0.85,1.15));
-      wins=Math.round(decisions*clamp(winPct*0.5+performanceFactor*0.06,0.05,0.75));
+      wins=Math.round(decisions*clamp(winPct*0.5,0.03,0.75));
       losses=Math.max(0,decisions-wins);
-      saves=Math.round(gamesCount*0.06*rand(0.7,1.3)); // occasional vulture saves in relief
-      var holdRate=clamp(0.18+(ovr/99)*0.28+performanceFactor*0.20,0.08,0.65);
+      saves=Math.round(gamesCount*0.05*rand(0.6,1.3)); // occasional vulture saves in relief
+      var holdRate=clamp(0.08+(ovr/99)*0.15+performanceFactor*0.34,0.03,0.68);
       holds=Math.round(gamesCount*holdRate);
     }
     var whip=clamp((h+bb)/(ip||1),0.6,2.6);
@@ -903,6 +914,12 @@
     });
     if(player.position==='batter') recomputeBatterDerived(line);
     else recomputePitcherDerived(line);
+    // A defensive event (risky_double_play, infield_shift_gamble) is only offered while the
+    // player is still a fielder, but a DIFFERENT event resolved the same season can convert
+    // them to DH (dh_conversion) after that event was already picked — since events are all
+    // selected up front, then resolved and applied together at season's end, that combination
+    // could leave a DH with a nonzero error count. A DH never takes the field, full stop.
+    if(player.position==='batter' && player.isDH) line.errors=0;
   }
 
   function seasonScoreBatter(line){ return line.ops*100+line.hr*1.2+line.rbi*0.3+line.avg*80; }
@@ -1022,6 +1039,17 @@
   // compounding.
   function capSalaryOffer(player, amount){
     return clamp(Math.round(amount), 2700, Math.round(salaryCeiling(player)*1.08));
+  }
+  // A separate, more generous cap for a "파격적인 인상 요구" (aggressive ask) — using the same
+  // 1.08x cap as the moderate ask meant that once a player's current team offer was already
+  // sitting close to their salary ceiling (a well-paid veteran nearing the top of their market
+  // value), BOTH the moderate (offer*1.15) and aggressive (offer*1.5) requests clipped to the
+  // exact same capped number, so the two negotiation options displayed (and paid out) an
+  // identical amount — indistinguishable choices. Giving the aggressive ask real extra headroom
+  // above the moderate ask's cap keeps them visibly different even when both would otherwise
+  // hit a ceiling.
+  function capAggressiveSalaryOffer(player, amount){
+    return clamp(Math.round(amount), 2700, Math.round(salaryCeiling(player)*1.30));
   }
   function teamOfferSalary(player, perf){
     var raise=clamp(perf*0.35, -0.25, 0.45);
@@ -1196,6 +1224,15 @@
             var label=statList(p.position).filter(function(s){ return s.key===key; })[0].label;
             return '강도 높은 훈련으로 이번 시즌 '+label+' 능력이 일시적으로 상승했습니다. (부상 위험 증가)';
           }},
+        { label:'적당한 강도로 훈련한다', resolve:function(p, ctx){
+            var keys2=statList(p.position).filter(function(s){ return s.key!=='mental'; }).map(function(s){ return s.key; });
+            var key2=pick(keys2);
+            var boost2=randInt(2,5);
+            ctx.statBoost[key2]=(ctx.statBoost[key2]||0)+boost2;
+            ctx.injuryRiskDelta += 0.03;
+            var label2=statList(p.position).filter(function(s){ return s.key===key2; })[0].label;
+            return '무리하지 않는 선에서 훈련해 '+label2+' 능력이 소폭 상승했습니다.';
+          }},
         { label:'무리하지 않는다', resolve:function(p, ctx){
             return '무리하지 않고 컨디션 관리에 집중했습니다.';
           }}
@@ -1257,6 +1294,13 @@
             adjustFan(p, -3);
             return '나선 것이 오히려 오지랖으로 비쳐지며 분위기가 더 어색해졌습니다.';
           }},
+        { label:'제3자를 통해 조용히 중재한다', resolve:function(p, ctx){
+            if(Math.random()<0.55){
+              adjustFan(p, 1);
+              return '코치진을 통해 넌지시 중재하며 큰 잡음 없이 상황이 정리됐습니다.';
+            }
+            return '중재가 뜻대로 되지 않았지만 시간이 지나며 자연스럽게 가라앉았습니다.';
+          }},
         { label:'거리를 둔다', resolve:function(p, ctx){
             if(Math.random()<0.35){
               adjustFan(p, 1);
@@ -1277,6 +1321,14 @@
             ctx.statBoost[key]=(ctx.statBoost[key]||0)+6;
             ctx.injuryRiskDelta += 0.16;
             return '아픔을 참고 경기에 나서 팀에 힘을 보탰지만 부상 위험이 커졌습니다.';
+          }},
+        { label:'하루 정도만 상태를 지켜본다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.02;
+            if(Math.random()<0.3){
+              ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+2;
+              return '하루 지켜보니 통증이 가라앉아 큰 무리 없이 시즌을 이어갔습니다.';
+            }
+            return '무리하지 않는 선에서 상태를 지켜보며 시즌을 이어갔습니다.';
           }},
         { label:'휴식을 취한다', resolve:function(p, ctx){
             ctx.injuryRiskDelta -= 0.08;
@@ -1344,6 +1396,13 @@
             ctx.injuryRiskDelta += 0.05;
             return '새 변화구를 다듬으며 무기를 하나 더 갖췄습니다.';
           }},
+        { label:'부담 없이 가볍게만 시도해본다', resolve:function(p, ctx){
+            if(Math.random()<0.5){
+              ctx.statBoost.breaking=(ctx.statBoost.breaking||0)+randInt(2,4);
+              return '큰 부담 없이 시도한 새 구종이 조금씩 손에 익어갔습니다.';
+            }
+            return '가볍게 시도만 해봤을 뿐 실전에는 쓰지 않았습니다.';
+          }},
         { label:'기존 레퍼토리를 유지한다', resolve:function(p, ctx){
             return '기존에 하던 대로 안정적인 루틴을 이어갔습니다.';
           }}
@@ -1358,6 +1417,10 @@
             ctx.statBoost.contact=(ctx.statBoost.contact||0)+randInt(6,10);
             ctx.statBoost.power=(ctx.statBoost.power||0)-3;
             return '타격 폼을 교정해 정확도가 좋아졌지만 적응 기간 동안 힘은 다소 줄었습니다.';
+          }},
+        { label:'부분적으로만 손을 본다', resolve:function(p, ctx){
+            ctx.statBoost.contact=(ctx.statBoost.contact||0)+randInt(2,4);
+            return '큰 틀은 유지한 채 세부적인 부분만 다듬으며 무난하게 넘어갔습니다.';
           }},
         { label:'기존 폼을 고수한다', resolve:function(p, ctx){
             return '익숙한 폼을 그대로 유지하기로 했습니다.';
@@ -1555,6 +1618,11 @@
             ctx.injuryRiskDelta += 0.08;
             applyPermanentStatDelta(p,'mental',2);
             return '국가대표로 발탁되어 값진 경험을 쌓고 팬들의 큰 자부심이 되었습니다.';
+          }},
+        { label:'짧은 대회에 한해서만 참가한다', resolve:function(p, ctx){
+            adjustFan(p, 7);
+            ctx.injuryRiskDelta += 0.03;
+            return '일정이 짧은 대회에만 선별적으로 참가하며 부담을 줄였습니다.';
           }},
         { label:'소속팀 시즌에 집중하겠다고 답한다', resolve:function(p, ctx){
             adjustFan(p, 2);
@@ -1770,6 +1838,15 @@
             ctx.lineBoost.runs=(ctx.lineBoost.runs||0)-randInt(2,5);
             return '도루를 시도했지만 자주 아웃되며 오히려 득점 기회를 여러 번 날렸습니다.';
           }},
+        { label:'확실한 타이밍에서만 시도한다', resolve:function(p, ctx){
+            var chance2=clamp(0.5+(p.stats.speed-50)/150, 0.35, 0.85);
+            if(Math.random()<chance2){
+              ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+randInt(3,6);
+              return '확실한 타이밍만 노린 선별적인 도루가 꾸준히 성공했습니다.';
+            }
+            ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+randInt(1,2);
+            return '신중하게 기회를 골랐지만 도루 개수 자체는 크게 늘지 않았습니다.';
+          }},
         { label:'안전하게 주루를 자제한다', resolve:function(p, ctx){
             ctx.lineBoost.sb=(ctx.lineBoost.sb||0)-randInt(2,5);
             return '무리한 주루 대신 안전한 야구를 택했습니다.';
@@ -1981,10 +2058,312 @@
             adjustFan(p, -5);
             return '정면 승부가 실패하며 블론 세이브로 이어졌습니다.';
           }},
+        { label:'타자별로 유연하게 승부한다', resolve:function(p, ctx){
+            var chance2=clamp(0.45+((p.stats.velocity+p.stats.breaking+p.stats.mental)/3-50)/150,0.3,0.8);
+            if(Math.random()<chance2){
+              ctx.lineBoost.saves=(ctx.lineBoost.saves||0)+randInt(2,4);
+              return '상대에 따라 유연하게 승부를 걸며 안정적으로 세이브를 쌓았습니다.';
+            }
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(2,4);
+            ctx.lineBoost.saves=(ctx.lineBoost.saves||0)+randInt(0,2);
+            return '유연한 승부를 시도했지만 뚜렷한 성과 없이 시즌을 이어갔습니다.';
+          }},
         { label:'안전하게 약점만 공략한다', resolve:function(p, ctx){
             ctx.lineBoost.saves=(ctx.lineBoost.saves||0)+randInt(1,3);
             ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(3,6);
             return '약점만 집요하게 공략하며 안전하게 세이브를 쌓았습니다.';
+          }}
+      ]
+    },
+    {
+      id:'batting_slump',
+      condition:function(p){ return p.position==='batter'; },
+      prompt:function(p){ return '타격감이 좀처럼 살아나지 않는 슬럼프가 찾아왔습니다. 어떻게 대처할까요?'; },
+      choices:[
+        { label:'스윙을 원점부터 재정비한다', resolve:function(p, ctx){
+            var chance=clamp(0.35+(p.stats.mental-50)/150,0.2,0.75);
+            if(Math.random()<chance){
+              ctx.statBoost.contact=(ctx.statBoost.contact||0)+randInt(5,9);
+              return '스윙을 완전히 재정비한 것이 통하며 슬럼프를 털어냈습니다.';
+            }
+            ctx.statBoost.contact=(ctx.statBoost.contact||0)-4;
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-3;
+            return '급하게 바꾼 스윙이 오히려 감각을 더 흐트러뜨렸습니다.';
+          }},
+        { label:'루틴은 유지한 채 시간으로 풀어간다', resolve:function(p, ctx){
+            if(Math.random()<0.5){
+              return '평소 루틴을 유지하며 시간이 지나자 자연스럽게 타격감이 돌아왔습니다.';
+            }
+            ctx.statBoost.contact=(ctx.statBoost.contact||0)-3;
+            return '뚜렷한 해법 없이 슬럼프가 예상보다 길게 이어졌습니다.';
+          }},
+        { label:'코치와 영상 분석에 매달린다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+            ctx.injuryRiskDelta += 0.02;
+            return '영상 분석으로 원인을 찾아내며 조금씩 감각을 회복해갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'command_funk',
+      condition:function(p){ return p.position==='pitcher'; },
+      prompt:function(p){ return '제구가 흔들리는 부진에 빠졌습니다. 어떻게 다잡을까요?'; },
+      choices:[
+        { label:'투구 폼을 원점부터 재정비한다', resolve:function(p, ctx){
+            var chance=clamp(0.35+(p.stats.mental-50)/150,0.2,0.75);
+            if(Math.random()<chance){
+              ctx.statBoost.control=(ctx.statBoost.control||0)+randInt(5,9);
+              return '폼을 재정비한 효과가 나타나며 제구가 눈에 띄게 안정됐습니다.';
+            }
+            ctx.statBoost.control=(ctx.statBoost.control||0)-4;
+            return '급하게 바꾼 폼이 오히려 밸런스를 더 무너뜨렸습니다.';
+          }},
+        { label:'불펜 피칭으로 감각만 다듬는다', resolve:function(p, ctx){
+            if(Math.random()<0.5){ return '불펜에서 꾸준히 감각을 다듬으며 서서히 안정을 찾았습니다.'; }
+            ctx.statBoost.control=(ctx.statBoost.control||0)-3;
+            return '뚜렷한 해법 없이 부진이 예상보다 길게 이어졌습니다.';
+          }},
+        { label:'투수 코치와 영상 분석에 매달린다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+            ctx.injuryRiskDelta += 0.02;
+            return '영상 분석으로 릴리스포인트 문제를 찾아내며 조금씩 회복했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'allstar_selection',
+      condition:function(p){ return (p.fanApproval||50)>=55; },
+      prompt:function(p){ return '올스타전 출전 명단에 이름을 올렸습니다.'; },
+      choices:[
+        { label:'적극적으로 이벤트를 즐기며 참가한다', resolve:function(p, ctx){
+            adjustFan(p, 9);
+            ctx.injuryRiskDelta += 0.04;
+            return '올스타전 무대를 만끽하며 팬들에게 즐거움을 선사했습니다.';
+          }},
+        { label:'휴식 기간으로 삼아 컨디션을 관리한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            ctx.injuryRiskDelta -= 0.04;
+            return '휴식기로 삼아 몸 관리에 집중하며 후반기를 준비했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'home_run_derby',
+      condition:function(p){ return p.position==='batter' && p.stats.power>=55; },
+      prompt:function(p){ return '올스타 홈런 더비 출전 제안이 왔습니다.'; },
+      choices:[
+        { label:'출전한다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.power-50)/150,0.25,0.75);
+            if(Math.random()<chance){
+              adjustFan(p, 10);
+              return '홈런 더비에서 화끈한 스윙으로 우승, 큰 인기를 얻었습니다.';
+            }
+            ctx.statBoost.power=(ctx.statBoost.power||0)-2;
+            adjustFan(p, 3);
+            return '홈런 더비에서 일찍 탈락했지만 좋은 볼거리를 선사했습니다.';
+          }},
+        { label:'스윙 밸런스를 걱정해 정중히 거절한다', resolve:function(p, ctx){
+            return '시즌 스윙 밸런스가 흐트러질 것을 우려해 참가하지 않았습니다.';
+          }}
+      ]
+    },
+    {
+      id:'veteran_retires',
+      condition:function(p){ return p.careerYears>=5; },
+      prompt:function(p){ return '오랜 시간 함께한 팀 선배가 은퇴를 선언하며 은퇴식 축사를 부탁합니다.'; },
+      choices:[
+        { label:'직접 나서 감사 인사를 전한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',2);
+            adjustFan(p, 5);
+            return '진심 어린 축사로 팬들과 동료들에게 깊은 인상을 남겼습니다. (멘탈 소폭 상승)';
+          }},
+        { label:'조용히 마음으로만 감사를 전한다', resolve:function(p, ctx){
+            return '앞에 나서지 않고 조용히 마음으로 감사를 전했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'position_change_request',
+      condition:function(p){ return p.position==='batter' && !p.isDH && p.careerYears>=3; },
+      prompt:function(p){ return '구단이 포지션 전환 테스트를 제안합니다.'; },
+      choices:[
+        { label:'새 포지션에 도전한다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.defense-50)/150,0.25,0.7);
+            if(Math.random()<chance){
+              ctx.statBoost.defense=(ctx.statBoost.defense||0)+randInt(4,8);
+              return '새로운 포지션에 성공적으로 적응하며 활용 폭이 넓어졌습니다.';
+            }
+            ctx.injuryRiskDelta += 0.05;
+            ctx.statBoost.defense=(ctx.statBoost.defense||0)-3;
+            return '낯선 포지션 적응에 애를 먹으며 수비에서 어려움을 겪었습니다.';
+          }},
+        { label:'기존 포지션을 지킨다', resolve:function(p, ctx){
+            return '익숙한 자리를 지키며 안정적으로 시즌을 이어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'closer_promotion',
+      condition:function(p){ return p.position==='pitcher' && p.subrole==='불펜' && p.careerYears>=2; },
+      prompt:function(p){ return '마무리 자리가 공석이 되며 감독이 마무리 전환을 제안합니다.'; },
+      choices:[
+        { label:'마무리 보직을 받아들인다', resolve:function(p, ctx){
+            p.subrole='마무리';
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            adjustFan(p, 5);
+            return '마무리 투수로 보직을 옮기며 새로운 도전을 시작했습니다.';
+          }},
+        { label:'셋업맨 역할을 유지하겠다고 답한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',1);
+            return '중압감이 덜한 셋업맨 역할에 남기로 했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'scouting_report_leak',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '상대 팀들의 집중 분석 대상이 되며 약점을 공략당하기 시작했습니다.'; },
+      choices:[
+        { label:'약점을 정면으로 보완한다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(4,8);
+            ctx.injuryRiskDelta += 0.03;
+            return '집요하게 약점을 파고들어 보완하며 한 단계 성장했습니다.';
+          }},
+        { label:'강점을 극대화하는 데 집중한다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(2,5);
+            return '약점 보완 대신 확실한 강점을 극대화하는 쪽을 택했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'agent_strategy',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '에이전트가 다가오는 협상을 앞두고 시즌 운영 전략을 상의해왔습니다.'; },
+      choices:[
+        { label:'공격적으로 개인 성적을 쌓는 데 집중한다', resolve:function(p, ctx){
+            ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)+3;
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            return '개인 성적을 극대화하는 방향으로 시즌을 운영하기로 했습니다.';
+          }},
+        { label:'팀 성적과 조화를 우선한다', resolve:function(p, ctx){
+            adjustFan(p, 3);
+            return '팀 성적을 우선하는 모습으로 구단과 팬들의 신뢰를 얻었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'road_trip_fatigue',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '긴 원정 일정으로 이동 피로가 누적되고 있습니다.'; },
+      choices:[
+        { label:'이 악물고 경기력을 유지한다', resolve:function(p, ctx){
+            ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+3;
+            ctx.injuryRiskDelta += 0.06;
+            return '피로를 이겨내며 원정에서도 흔들림 없는 경기력을 보였습니다.';
+          }},
+        { label:'이동 중 체력 관리에 집중한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.05;
+            return '이동 중에도 철저한 컨디션 관리로 몸 상태를 지켰습니다.';
+          }}
+      ]
+    },
+    {
+      id:'front_office_meeting',
+      condition:function(p){ return p.careerYears>=6; },
+      prompt:function(p){ return '구단 프런트가 팀의 리빌딩 방향에 대한 선수단 대표의 의견을 구합니다.'; },
+      choices:[
+        { label:'솔직하게 목소리를 낸다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',2);
+            adjustFan(p, 4);
+            return '솔직한 의견 개진으로 선수단을 대표하는 신뢰를 얻었습니다. (멘탈 소폭 상승)';
+          }},
+        { label:'구단 방침을 조용히 따른다', resolve:function(p, ctx){
+            return '구단의 방침에 따르며 조용히 시즌에만 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'controversial_call',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '중요한 순간, 석연치 않은 판정이 나오며 벤치와 팬들이 술렁입니다.'; },
+      choices:[
+        { label:'격하게 항의한다', resolve:function(p, ctx){
+            if(Math.random()<0.4){
+              adjustFan(p, 5);
+              return '분노를 표출한 모습에 팬들도 공감하며 오히려 사기가 올랐습니다.';
+            }
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-3;
+            adjustFan(p, -3);
+            return '판정에 흥분해 리듬이 흐트러지며 이후 경기력에 영향을 받았습니다.';
+          }},
+        { label:'침착하게 다음 플레이에 집중한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',1);
+            return '판정에 흔들리지 않고 침착하게 다음 플레이에 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'return_from_rehab',
+      condition:function(p){ return (p.severeInjuryCount||0)>=1; },
+      prompt:function(p){ return '재활을 마치고 복귀했지만 예전 몸 상태로 완전히 돌아왔는지 확신이 서지 않습니다.'; },
+      choices:[
+        { label:'단계적으로 출전량을 늘려간다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.06;
+            return '무리하지 않고 서서히 몸을 만들어가며 안정적으로 시즌에 녹아들었습니다.';
+          }},
+        { label:'곧바로 풀타임으로 나선다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.mental-50)/150,0.25,0.7);
+            if(Math.random()<chance){
+              ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+4;
+              return '곧바로 풀타임으로 나선 것이 성공적으로 통하며 완전히 재기했습니다.';
+            }
+            ctx.injuryRiskDelta += 0.12;
+            return '무리한 컴백이 부담이 되며 재부상 위험이 커졌습니다.';
+          }}
+      ]
+    },
+    {
+      id:'fan_appreciation_day',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '구단이 팬 감사 행사의 얼굴로 나서달라고 요청합니다.'; },
+      choices:[
+        { label:'행사의 얼굴을 맡는다', resolve:function(p, ctx){
+            adjustFan(p, 8);
+            ctx.injuryRiskDelta += 0.02;
+            return '행사의 얼굴로 나서며 팬들과 뜨거운 교감을 나눴습니다.';
+          }},
+        { label:'다른 동료에게 양보한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            return '스포트라이트를 동료에게 양보하며 묵묵히 시즌에 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'historic_bid',
+      condition:function(p){ return true; },
+      prompt:function(p){
+        return p.position==='batter'
+          ? '사이클링 히트(사이클 히트)를 눈앞에 둔 타석에 들어섭니다.'
+          : '노히트노런을 이어가며 마지막 이닝에 접어들었습니다.';
+      },
+      choices:[
+        { label:'기록에 도전한다', resolve:function(p, ctx){
+            var chance=clamp(0.3+(overall(p)-50)/180,0.15,0.65);
+            if(Math.random()<chance){
+              adjustFan(p, 15);
+              ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+              return p.position==='batter'
+                ? '짜릿한 사이클링 히트를 완성하며 구장을 열광시켰습니다!'
+                : '마침내 노히트노런을 완성하며 커리어에 길이 남을 순간을 만들었습니다!';
+            }
+            adjustFan(p, 4);
+            return '대기록에는 아쉽게 닿지 못했지만 인상적인 도전이었습니다.';
+          }},
+        { label:'무리하지 않고 팀 플레이에 집중한다', resolve:function(p, ctx){
+            adjustFan(p, 1);
+            return '개인 기록보다 안전하게 팀 플레이를 우선했습니다.';
           }}
       ]
     }
@@ -1993,8 +2372,8 @@
   function pickSeasonEvents(p){
     var eligible = EVENT_POOL.filter(function(e){ return !e.condition || e.condition(p); });
     eligible = eligible.slice().sort(function(){ return Math.random()-0.5; });
-    var minCount = Math.min(2, eligible.length);
-    var maxCount = Math.min(3, eligible.length);
+    var minCount = Math.min(3, eligible.length);
+    var maxCount = Math.min(4, eligible.length);
     var count = randInt(minCount, maxCount);
     return eligible.slice(0, count);
   }
@@ -2692,24 +3071,32 @@
       }
     }
 
-    // General, luck-driven growth from the season overall — spread across any stat (including
-    // the focus stat again, occasionally). For a player with NO fixed focus this is the ONLY
-    // growth channel they have, so on its own it has to be generous enough to carry a balanced
-    // build to a respectable (80+) peak OVR; a focused player still gets a much smaller slice
-    // of it on top of their dedicated training above.
+    // General, luck-driven growth from the season overall — spread across ALL of the player's
+    // stats (including the focus stat again, occasionally). Retuned (2026-09): this channel
+    // used to shrink to almost nothing (0-3 points total) the moment a growth focus was set, on
+    // the theory that a focused player's dedicated training above was their "real" growth and
+    // this was just a small bonus on top. In practice that meant picking a focus quietly
+    // STARVED every stat except the chosen one — a player who focused hard on one stat still
+    // ended up with a barely-changed OVERALL rating, because the other four stats basically
+    // stopped growing. Now every player, focused or not, gets this same full-strength general
+    // channel touching all their stats — a focus no longer trades "grow everything a little" for
+    // "grow one thing a lot", it's "grow everything a little, AND grow one thing extra" via the
+    // dedicated focusAttempts pass above. This is what actually raises OVERALL rating over a
+    // career instead of just the one chosen stat.
     // Same raw-floor-then-taper structure as focusAttempts above, and for the same reason: the
-    // no-focus channel needs a real floor during the prime (so a balanced build reliably climbs
-    // to its 80+ OVR target) WITHOUT that floor re-asserting itself after taper and guaranteeing
-    // a season always gets at least 1 attempt no matter how old the player is — that quiet
-    // forever-growth is exactly what made checkForcedRetirement's 방출 (forced release for
-    // sustained poor form) unreachable at any threshold, since aging decline could never get
-    // ahead of a growth channel that literally never hit zero. Applying the floor before taper
-    // and letting taper round the FINAL count down to a true 0 in old age fixes that while still
-    // giving prime-age growth its full strength.
-    var growthPointsRaw = focusKey ? clamp(1+sf.perf*2, 0, 3) : clamp(18+sf.perf*10, 2, 24);
-    var growthPoints = focusKey
-      ? roundClamp(growthPointsRaw*ageTaper, 0, 3)
-      : roundClamp(growthPointsRaw*ageTaper, 0, 24);
+    // channel needs a real floor during the prime (so a build reliably climbs to its 80+ OVR
+    // target) WITHOUT that floor re-asserting itself after taper and guaranteeing a season
+    // always gets at least 1 attempt no matter how old the player is — that quiet forever-growth
+    // is exactly what made checkForcedRetirement's 방출 (forced release for sustained poor form)
+    // unreachable at any threshold, since aging decline could never get ahead of a growth channel
+    // that literally never hit zero. Applying the floor before taper and letting taper round the
+    // FINAL count down to a true 0 in old age fixes that while still giving prime-age growth its
+    // full strength.
+    // Baseline bumped 18->19 (2026-09) to offset ALLOC_BUDGET dropping from 220 to 200 — with
+    // 20 fewer starting points to distribute at creation, growth needs to make up the difference
+    // so a balanced (no-focus) build still reaches the same ~80+ OVR peak probability as before.
+    var growthPointsRaw = clamp(19+sf.perf*10, 2, 24);
+    var growthPoints = roundClamp(growthPointsRaw*ageTaper, 0, 24);
     for(var gi=0; gi<growthPoints; gi++){
       applyPermanentStatDelta(p, pick(growthKeys), 1);
     }
@@ -2870,7 +3257,7 @@
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
         '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="accept">제안을 수락한다 — 안전하게 '+fmtMoney(sf.teamOffer)+'</button>'+
         '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="moderate">적당히 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.15))+'</button>'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="aggressive">파격적인 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.5))+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="aggressive">파격적인 인상을 요구한다 — 약 '+fmtMoney(capAggressiveSalaryOffer(p, sf.teamOffer*1.5))+'</button>'+
       '</div>'+
       '<p class="lede" style="font-size:13px;margin-top:14px;">과한 요구는 성적이 기대에 못 미쳤을 때 오히려 연봉 삭감이나 트레이드로 이어질 수 있습니다.</p>';
     openSeasonModal(html);
@@ -2903,7 +3290,7 @@
       }
       finalizeNegotiationNarrative(narrative);
     } else {
-      var bigAsk=capSalaryOffer(p, offer*1.5);
+      var bigAsk=capAggressiveSalaryOffer(p, offer*1.5);
       var chance2=clamp(0.35+perf*0.5+fanBonus+tenureBonus,0.05,0.90);
       if(Math.random()<chance2){
         p.salary=bigAsk;
@@ -3000,7 +3387,9 @@
     p.teamTenureYears=(p.teamTenureYears||0)+1;
     p.yearsToFA=(p.yearsToFA===undefined?3:p.yearsToFA)-1;
     applyAgingDecline(p);
-    p.growthFocus=null;
+    // Growth focus deliberately carries over into next season instead of resetting to null —
+    // a player who just clicks straight through to the next season keeps training the same
+    // stat they picked before, rather than silently falling back to balanced growth.
     state.seasonFlow=null;
     state.hubTab='player';
     render();
