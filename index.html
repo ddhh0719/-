@@ -458,6 +458,17 @@
   function pick(arr){ return arr[randInt(0,arr.length-1)]; }
   function clamp(v,lo,hi){ return Math.min(hi,Math.max(lo,v)); }
   function roundClamp(v,lo,hi){ return clamp(Math.round(v),lo,hi); }
+  // A stat only clears ELITE_STAT_FLOOR by being someone's actual growth focus — the
+  // per-player-per-stat non-focus cap (nonFocusStatCap) tops out at NON_FOCUS_STAT_CAP_MAX
+  // (85), so a stat that was never focused can never reach this range no matter how long
+  // the career runs. Used to gate the extra payoff a genuinely maxed stat gets on top of the
+  // normal linear curve, so "good at everything, great at nothing" and "actually specialized"
+  // read differently in the numbers that matter most (batting average, RBI power).
+  var ELITE_STAT_FLOOR = 85;
+  var ELITE_STAT_SPAN = 14;
+  function eliteBonus(stat, coef, exp){
+    return Math.pow(clamp((stat-ELITE_STAT_FLOOR)/ELITE_STAT_SPAN,0,1), exp||1.4) * coef;
+  }
   function pad2(n){ return String(n).padStart(2,'0'); }
 
   function formatAvg(avg){
@@ -523,11 +534,21 @@
       {name:'노경은',value:130},{name:'구승민',value:122},{name:'우규민',value:122},
       {name:'류택현',value:122}
     ]},
+    // hits/rbi lists scaled up ~1.3x from the real KBO all-time totals (2026-09, "역대 기록
+    // 달성이 너무 쉽다" pass): a real KBO career very rarely runs a full healthy 20+ seasons at
+    // near-100% playing time the way a forced-retirement-at-41 career in this game does by
+    // default, so this game's typical plate-appearance volume already runs well above what these
+    // real record-holders actually compiled — comparing the raw totals 1:1 meant literally any
+    // completed career (focused or not) blew past the real record just from sheer longevity,
+    // regardless of how good the player actually was. Scaling the bar up (not the per-season
+    // formula, which stays exactly as tuned) restores the comparison's original meaning: only a
+    // genuinely elite, specialized peak (see the eliteBonus() in simulateBatterSeason above, only
+    // reachable by actually focusing that stat) should be able to clear it.
     hits: { label:'안타', unit:'개', list:[
-      {name:'손아섭',value:2616},{name:'최형우',value:2576},{name:'김현수',value:2524},
-      {name:'박용택',value:2504},{name:'최정',value:2343},{name:'양준혁',value:2318},
-      {name:'김태균',value:2209},{name:'이대호',value:2199},{name:'박한이',value:2174},
-      {name:'정성훈',value:2159}
+      {name:'손아섭',value:3400},{name:'최형우',value:3350},{name:'김현수',value:3280},
+      {name:'박용택',value:3255},{name:'최정',value:3045},{name:'양준혁',value:3015},
+      {name:'김태균',value:2870},{name:'이대호',value:2860},{name:'박한이',value:2825},
+      {name:'정성훈',value:2805}
     ]},
     homeRuns: { label:'홈런', unit:'개', list:[
       {name:'최정',value:517},{name:'이승엽',value:467},{name:'박병호',value:418},
@@ -536,10 +557,10 @@
       {name:'박경완',value:314}
     ]},
     rbi: { label:'타점', unit:'점', list:[
-      {name:'최형우',value:1733},{name:'최정',value:1619},{name:'김현수',value:1518},
-      {name:'이승엽',value:1498},{name:'이대호',value:1425},{name:'양준혁',value:1389},
-      {name:'김태균',value:1358},{name:'강민호',value:1309},{name:'박병호',value:1309},
-      {name:'이호준',value:1265}
+      {name:'최형우',value:2250},{name:'최정',value:2105},{name:'김현수',value:1973},
+      {name:'이승엽',value:1947},{name:'이대호',value:1853},{name:'양준혁',value:1806},
+      {name:'김태균',value:1765},{name:'강민호',value:1702},{name:'박병호',value:1702},
+      {name:'이호준',value:1645}
     ]},
     steals: { label:'도루', unit:'개', list:[
       {name:'전준호',value:549},{name:'이종범',value:510},{name:'이대형',value:505},
@@ -762,7 +783,15 @@
     // the baseline ~10 points pushes that same read out to roughly contact 85 instead, so hitting
     // .300 now takes a genuinely good, not just decent, contact stat — same shape of curve, just
     // shifted so growth has to actually pay off before results look great.
-    var avg=clamp(0.170+(s.contact/99)*0.125+(s.speed/99)*0.025+(s.mental/99)*0.020+rand(-0.024*varScale,0.024*varScale),0.130,0.380);
+    // Elite bonus (2026-09, "능력치가 높아야 기록 달성 가능하도록" pass): contact<=85 is exactly
+    // the non-focus range every batter eventually sits in regardless of what they actually
+    // trained (see nonFocusStatCap), so the plain linear term below is deliberately left as-is —
+    // changing it would quietly nerf every build at once, focused or not. What was missing was
+    // separation at the TOP: contact above 85 only happens when contact was someone's genuine
+    // growth focus, so only that case gets this extra, steeply-scaling bonus. A "good at
+    // everything" build's average stays exactly where it always was; a true contact specialist's
+    // average now clearly separates from it instead of sitting a few points higher.
+    var avg=clamp(0.170+(s.contact/99)*0.125+eliteBonus(s.contact,0.020)+(s.speed/99)*0.025+(s.mental/99)*0.020+rand(-0.024*varScale,0.024*varScale),0.130,0.380);
     var h=Math.round(ab*avg);
     // Home runs are power-driven but contact also matters — barreling the ball up requires
     // making contact in the first place, so a high-power/low-contact slugger doesn't get
@@ -787,7 +816,13 @@
     // situation, taking the extra base). RBI: power to drive the ball in, plus mental for
     // clutch at-bats.
     var runs=Math.round(h*0.42+(s.speed/99)*20+(s.mental/99)*6+randInt(0,14));
-    var rbi=Math.round(hr*1.55+h*0.26+(s.power/99)*16+(s.mental/99)*10+randInt(0,14));
+    // Elite bonus (2026-09, same pass as the avg formula above): power above 85 only happens
+    // when power was actually the growth focus, so the extra RBI payoff for real slugging is
+    // gated the same way. Mental's flat contribution is also trimmed here (10 -> 6) — mental
+    // was previously worth as much RBI as several points of power, which let a mental-only
+    // build ride hr*1.55+h*0.26 (both still healthy from a merely non-focus power/contact) plus
+    // a full mental bonus to career RBI totals that should have required a real power hitter.
+    var rbi=Math.round(hr*1.55+h*0.26+(s.power/99)*16+eliteBonus(s.power,18)+(s.mental/99)*6+randInt(0,14));
     // Stolen bases: driven almost entirely by speed (mental for reading the pitcher/catcher
     // is a small assist) — deliberately NOT touched by contact, so a fast player doesn't
     // quietly stop running just because they also hit for a high average. Retuned (2026-09):
@@ -795,15 +830,28 @@
     // player got identical SB ranges, and it capped out too low to feel like a real base-
     // stealing threat even at max speed. Now scales with playing time and rewards elite speed
     // disproportionately (the >1 exponent) the way real base-stealing does.
+    // Exponent steepened 1.6 -> 2.6 (2026-09, "낮은 주력으로 30도루" fix): at 1.6 the curve was
+    // shallow enough that a merely mediocre speed (55-60, well below anything resembling a real
+    // base-stealing threat) could still occasionally roll a 25-30 steal season, especially once
+    // stacked with the stolen_base_attempt event's flat bonus below. A speedFactor under 1 gets
+    // punished much harder by a higher exponent while barely moving the ceiling near speedFactor
+    // ~1 (elite speed), so this mainly separates "actually fast" from "not slow" instead of
+    // compressing the whole scale.
     var speedFactor=clamp((s.speed*0.85+s.mental*0.15)/99,0,1);
     var sbSpread=clamp(0.35*varScale,0.35,0.85);
-    var sb=Math.round(46*Math.pow(speedFactor,1.6)*(games/144)*rand(1-sbSpread,1+sbSpread));
+    var sb=Math.round(46*Math.pow(speedFactor,2.6)*(games/144)*rand(1-sbSpread,1+sbSpread));
     // Defensive errors: defense is the main driver, mental (composure) a smaller one.
     // A DH never takes the field, so they're never charged an error.
     var errors = player.isDH ? 0 : Math.max(0, Math.round(games*(0.16-(s.defense/99)*0.13-(s.mental/99)*0.02)*rand(0.5,1.5)));
+    // avg is recomputed from the rounded h/ab (not the raw pre-round `avg` above) so the
+    // displayed average always matches the actual box-score line — but that recomputation can
+    // land a hair above the .130/.380 clamp bounds purely from integer rounding on h (h rounds
+    // to the nearest whole hit, which can nudge h/ab a fraction of a point past the cap that
+    // was enforced on the pre-round value). Re-clamping here keeps the reported average honest
+    // to the documented hard ceiling in every case, not just almost every case.
     var line = {
       games:games, ab:ab, h:h, doubles:doubles, triples:triples, hr:hr, bb:bb, k:k, tb:tb,
-      avg:h/(ab||1), obp:obp, slg:slg, ops:ops, runs:runs, rbi:rbi, sb:sb, errors:errors, injury:injury
+      avg:clamp(h/(ab||1),0.130,0.380), obp:obp, slg:slg, ops:ops, runs:runs, rbi:rbi, sb:sb, errors:errors, injury:injury
     };
     return line;
   }
@@ -1235,7 +1283,7 @@
     // leaving the old Phase-7 coefficients would have reintroduced a large negative computePerf
     // bias (up to -20 raw score, i.e. -0.4 after the /50 clamp) that skews growth/negotiation/
     // award odds low across the board, worst for 마무리.
-    if(player.position==='batter') return 89+(ovr-30)*1.75;
+    if(player.position==='batter') return 88+(ovr-30)*1.80;
     if(player.subrole==='선발') return 19+(ovr-30)*2.66;
     if(player.subrole==='마무리') return 12+(ovr-30)*2.17;
     return 14+(ovr-30)*2.11; // 불펜 (and any other relief role)
@@ -2162,24 +2210,32 @@
       condition:function(p){ return p.position==='batter' && p.stats.speed>=40; },
       prompt:function(p){ return '감독이 도루 시도를 더 늘릴지, 무리하지 않을지 시즌 내내 결정을 맡깁니다.'; },
       choices:[
+        // Bonuses scaled by speedMult (2026-09, "낮은 주력으로 30도루" fix): these used to be flat
+        // regardless of how fast the player actually was — a speed-40 player who barely clears
+        // the event's gate got the exact same +5~10 jackpot as a speed-99 burner on a lucky roll,
+        // which is how a mediocre runner could stack this on top of a lucky base sb roll and reach
+        // 25-30 steals in a season. Now the size of the swing (both the reward and the bust) scales
+        // with speed, so this event amplifies an already-fast player instead of being a flat handout.
         { label:'적극적으로 도루를 시도한다', resolve:function(p, ctx){
             var chance=clamp(0.35+(p.stats.speed-50)/150, 0.2, 0.8);
+            var speedMult=clamp((p.stats.speed-30)/69, 0.12, 1);
             ctx.lineBoost.sb=(ctx.lineBoost.sb||0);
             if(Math.random()<chance){
-              ctx.lineBoost.sb += randInt(5,10);
+              ctx.lineBoost.sb += Math.round(randInt(5,10)*speedMult);
               return '적극적인 도루 시도가 성과를 내며 도루 개수가 크게 늘었습니다.';
             }
-            ctx.lineBoost.sb += randInt(1,3);
+            ctx.lineBoost.sb += Math.round(randInt(1,3)*speedMult);
             ctx.lineBoost.runs=(ctx.lineBoost.runs||0)-randInt(2,5);
             return '도루를 시도했지만 자주 아웃되며 오히려 득점 기회를 여러 번 날렸습니다.';
           }},
         { label:'확실한 타이밍에서만 시도한다', resolve:function(p, ctx){
             var chance2=clamp(0.5+(p.stats.speed-50)/150, 0.35, 0.85);
+            var speedMult2=clamp((p.stats.speed-30)/69, 0.12, 1);
             if(Math.random()<chance2){
-              ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+randInt(3,6);
+              ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+Math.round(randInt(3,6)*speedMult2);
               return '확실한 타이밍만 노린 선별적인 도루가 꾸준히 성공했습니다.';
             }
-            ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+randInt(1,2);
+            ctx.lineBoost.sb=(ctx.lineBoost.sb||0)+Math.round(randInt(1,2)*speedMult2);
             return '신중하게 기회를 골랐지만 도루 개수 자체는 크게 늘지 않았습니다.';
           }},
         { label:'안전하게 주루를 자제한다', resolve:function(p, ctx){
