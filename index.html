@@ -615,10 +615,16 @@
   // hits a bit harder than before so it reliably outweighs the residual growth chance that
   // never fully goes to zero (applyPermanentStatDelta has a 12% floor at any age).
   function applyAgingDecline(player){
+    // 34+ bands strengthened again (2026-09) alongside the growth-ceiling retune: raising how
+    // much a player can grow in their 20s/prime (see ageGrowthAttemptTaper) also raised how much
+    // residual growth chance was still winning out late in a career even with attempts tapered
+    // toward zero, which was quietly making checkForcedRetirement's 방출 unreachable again — a
+    // long career needs to actually keep eroding into the late 30s/40s, not plateau just above
+    // its old floor.
     var age=player.age, dropStats=0, lo=0, hi=0;
-    if(age>=40){ dropStats=3; lo=2; hi=5; }
-    else if(age>=37){ dropStats=3; lo=2; hi=4; }
-    else if(age>=34){ dropStats=3; lo=1; hi=3; }
+    if(age>=40){ dropStats=4; lo=3; hi=6; }
+    else if(age>=37){ dropStats=4; lo=2; hi=5; }
+    else if(age>=34){ dropStats=3; lo=2; hi=4; }
     else if(age>=31){ dropStats=2; lo=1; hi=2; }
     else return;
     var keys = statList(player.position).map(function(s){ return s.key; });
@@ -731,7 +737,16 @@
     // singles) and mental (plate discipline in tough counts) — so it's never purely a
     // contact-only number, but contact still dominates the read. The random swing widens
     // for a small sample and narrows toward a full season, same idea as home runs below.
-    var avg=clamp(0.185+(s.contact/99)*0.165+(s.speed/99)*0.035+(s.mental/99)*0.025+rand(-0.022*varScale,0.030*varScale),0.140,0.420);
+    // Retuned (2026-09): the old coefficients let a maxed-contact hitter post .370+ routinely,
+    // not as a rare peak season — and the growth-ceiling retune above (ageGrowthAttemptTaper)
+    // now gets a dedicated contact specialist all the way to ~99 contact far more reliably, so
+    // leaving this formula as-is would have made .370+ seasons even MORE common than the
+    // complaint that started this. Baseline/contact coefficient and the random spread are all
+    // trimmed, and the hard ceiling is pulled in from .420 to .380 so even a maxed-everything
+    // hitter in a career-best season only brushes the high .370s, and only in the smallest,
+    // luck-swingiest sample sizes (a short, injury-hit season) — a full 144-game season tops
+    // out a shade lower.
+    var avg=clamp(0.180+(s.contact/99)*0.125+(s.speed/99)*0.025+(s.mental/99)*0.020+rand(-0.024*varScale,0.024*varScale),0.140,0.380);
     var h=Math.round(ab*avg);
     // Home runs are power-driven but contact also matters — barreling the ball up requires
     // making contact in the first place, so a high-power/low-contact slugger doesn't get
@@ -757,7 +772,16 @@
     // clutch at-bats.
     var runs=Math.round(h*0.42+(s.speed/99)*20+(s.mental/99)*6+randInt(0,14));
     var rbi=Math.round(hr*1.55+h*0.26+(s.power/99)*16+(s.mental/99)*10+randInt(0,14));
-    var sb=Math.round(((s.speed*0.9+s.mental*0.1)/99)*rand(0,38));
+    // Stolen bases: driven almost entirely by speed (mental for reading the pitcher/catcher
+    // is a small assist) — deliberately NOT touched by contact, so a fast player doesn't
+    // quietly stop running just because they also hit for a high average. Retuned (2026-09):
+    // the old formula didn't scale with games played at all, so a bench bat and an everyday
+    // player got identical SB ranges, and it capped out too low to feel like a real base-
+    // stealing threat even at max speed. Now scales with playing time and rewards elite speed
+    // disproportionately (the >1 exponent) the way real base-stealing does.
+    var speedFactor=clamp((s.speed*0.85+s.mental*0.15)/99,0,1);
+    var sbSpread=clamp(0.35*varScale,0.35,0.85);
+    var sb=Math.round(46*Math.pow(speedFactor,1.6)*(games/144)*rand(1-sbSpread,1+sbSpread));
     // Defensive errors: defense is the main driver, mental (composure) a smaller one.
     // A DH never takes the field, so they're never charged an error.
     var errors = player.isDH ? 0 : Math.max(0, Math.round(games*(0.16-(s.defense/99)*0.13-(s.mental/99)*0.02)*rand(0.5,1.5)));
@@ -778,14 +802,17 @@
     var isReliever = player.subrole==='불펜' || player.subrole==='마무리';
     var ovr=overall(player);
     // Same idea as the batter side — a struggling pitcher gets fewer starts/appearances,
-    // not the same workload as an ace.
+    // not the same workload as an ace. A workload-variance roll is layered on top so a
+    // healthy pitcher with completely unchanged stats doesn't get the exact same games/IP
+    // every single season — usage fluctuates year to year even for the same guy.
     var playShare=clamp(0.32+(ovr/99)*0.85,0.32,1.0);
+    var workloadRoll=rand(0.88,1.12);
     var ip, gamesCount;
     if(isReliever){
-      gamesCount=Math.round((40+(s.stamina/99)*32)*missedFactor*playShare);
+      gamesCount=Math.round((40+(s.stamina/99)*32)*missedFactor*playShare*workloadRoll);
       ip=Math.round((gamesCount*(1.0+(s.stamina/99)*0.5))*10)/10;
     } else {
-      gamesCount=Math.round((16+(s.stamina/99)*15)*missedFactor*playShare);
+      gamesCount=Math.round((16+(s.stamina/99)*15)*missedFactor*playShare*workloadRoll);
       ip=Math.round((gamesCount*(4.2+(s.stamina/99)*2.4))*10)/10;
     }
     // Mental now shaves a bit off both ERA and walk rate (composure under pressure, fewer
@@ -799,20 +826,33 @@
     var h=Math.max(0,Math.round(ip*(1.16-(s.control/99)*0.26-(s.velocity/99)*0.10)+rand(-3,3)));
     var er=Math.round(era*ip/9);
     var winPct=clamp(0.5+(ovr-50)/150+rand(-0.1,0.1),0.15,0.85);
+    // How THIS season actually went, from the ERA that was just rolled — not the player's
+    // static overall rating. A closer who happened to have a rough year on the mound has to
+    // actually pitch worse in the results (fewer/blown saves), and a card-carrying ace who
+    // ran hot gets rewarded — decisions, saves and holds all key off this instead of ovr
+    // alone, so results track the season that actually happened, not just the player sheet.
+    // era 3.6 is "average", 1.4 (min) is elite, 9.5 (max) is disastrous.
+    var performanceFactor=clamp((3.6-era)/2.6,-1,1);
     // Role shapes the decision profile as much as skill does — a closer simply doesn't get
     // the decisions (or the wins) a starter accumulates, no matter how sharp their stuff is.
     var isCloser = player.subrole==='마무리';
     var decisions, wins, losses, saves, holds;
     if(player.subrole==='선발'){
-      decisions=Math.round(gamesCount*0.80);
-      wins=Math.round(decisions*winPct);
+      decisions=Math.round(gamesCount*0.80*rand(0.9,1.1));
+      wins=Math.round(decisions*clamp(winPct+performanceFactor*0.08,0.08,0.92));
       losses=Math.max(0,decisions-wins);
       saves=0; holds=0;
     } else if(isCloser){
-      decisions=Math.round(gamesCount*0.14);
-      wins=Math.min(9, Math.round(decisions*winPct*0.45)); // most closer decisions are blown-save losses, not wins
+      // A bad season means more blown-save situations turning into decisions, not the same
+      // fixed decision count every year.
+      decisions=Math.round(gamesCount*(0.14+Math.max(0,-performanceFactor)*0.07)*rand(0.85,1.15));
+      wins=Math.min(9, Math.round(decisions*clamp(winPct*0.45+performanceFactor*0.10,0.05,0.7))); // most closer decisions are blown-save losses, not wins
       losses=Math.max(0,decisions-wins);
-      var saveRate=clamp(0.28+(ovr/99)*0.5,0.28,0.78);
+      // Save conversion now leans heavily on how the season actually went (performanceFactor,
+      // from this year's ERA) rather than just the player's static rating — an ERA well over
+      // 3 for a closer can no longer coexist with a huge save total the way it used to, and a
+      // shaky year now visibly costs saves even if the underlying stats didn't change.
+      var saveRate=clamp(0.28+(ovr/99)*0.20+performanceFactor*0.32,0.14,0.85);
       saves=Math.round(gamesCount*saveRate);
       holds=0; // holds are a setup-man stat — a closer's outings are save situations, not hold situations
     } else {
@@ -822,11 +862,11 @@
       // (was 20% of games at 0.85x winPct — routinely out-earning saves+holds combined) and
       // holds added as the real workhorse-reliever stat, scaling with quality like saves does
       // for a closer.
-      decisions=Math.round(gamesCount*0.12);
-      wins=Math.round(decisions*winPct*0.5);
+      decisions=Math.round(gamesCount*0.12*rand(0.85,1.15));
+      wins=Math.round(decisions*clamp(winPct*0.5+performanceFactor*0.06,0.05,0.75));
       losses=Math.max(0,decisions-wins);
-      saves=Math.round(gamesCount*0.06); // occasional vulture saves in relief
-      var holdRate=clamp(0.18+(ovr/99)*0.45,0.18,0.65);
+      saves=Math.round(gamesCount*0.06*rand(0.7,1.3)); // occasional vulture saves in relief
+      var holdRate=clamp(0.18+(ovr/99)*0.28+performanceFactor*0.20,0.08,0.65);
       holds=Math.round(gamesCount*holdRate);
     }
     var whip=clamp((h+bb)/(ip||1),0.6,2.6);
@@ -931,7 +971,7 @@
   function checkForcedRetirement(player){
     var ovr=overall(player);
     if(player.age>=41) return '나이';
-    if(ovr<48){
+    if(ovr<50){
       player.lowFormYears=(player.lowFormYears||0)+1;
       if(player.age>=33 && player.lowFormYears>=2) return '방출';
     } else {
@@ -951,7 +991,13 @@
   // wins, while a reliever/closer's leans on saves/holds — one flat curve can't fit both.
   function expectedSeasonScore(player){
     var ovr=overall(player);
-    if(player.position==='batter') return 97+(ovr-30)*2.15;
+    // Batter intercept re-derived again (2026-09): the batting-average ceiling retune above
+    // (see simulateBatterSeason's avg formula) trimmed roughly 15 points off a typical batter's
+    // seasonScoreBatter regardless of OVR — avg feeds seasonScoreBatter both directly (avg*80)
+    // and indirectly through OPS — so leaving the old intercept (97) at its Phase-4 value would
+    // have re-introduced the same systematic-negative-perf bias Phase 4 fixed the first time,
+    // just from the opposite direction (an avg formula change instead of a scoring-formula one).
+    if(player.position==='batter') return 82+(ovr-30)*2.15;
     if(player.subrole==='선발') return 25+(ovr-30)*2.70;
     if(player.subrole==='마무리') return 28+(ovr-30)*2.15;
     return 26+(ovr-30)*2.05; // 불펜 (and any other relief role)
@@ -1100,6 +1146,20 @@
     if(age<=33) return -0.10;
     if(age<=36) return -0.22;
     return -0.32;
+  }
+  // Multiplies how many training ATTEMPTS a season's growth gets (finalizeSeasonEvents),
+  // separate from ageGrowthBonus above which only affects each individual attempt's success
+  // chance. Needed once the raw attempt budget was raised enough for dedicated/balanced growth
+  // to reach a realistic peak (90+ for a focused specialist, 80+ OVR for a balanced build) —
+  // without this, that many attempts per season would keep outrunning aging decline well past
+  // 33 just from sheer volume, even with a lower per-attempt success chance. Full attempts
+  // through the real prime, then cut off hard so the extra budget can't drag the peak later.
+  function ageGrowthAttemptTaper(age){
+    if(age===undefined || age===null) return 1;
+    if(age<=30) return 1;
+    if(age<=33) return 0.22;
+    if(age<=36) return 0.08;
+    return 0.03;
   }
   // Growth gets harder to earn the closer a stat sits to its ceiling — no more free ride to 99.
   // chanceBonus lets deliberate, season-long training (a chosen growth focus) succeed more
@@ -2590,12 +2650,35 @@
     // A chosen growth focus gets its OWN reliable training pass (large flat success-chance
     // bonus) so committing to a stat has a clear, felt payoff — separate from the smaller,
     // luck-driven growth everyone gets from how the season went overall.
+    //
+    // Both channels below were re-derived (2026-09) after players who kept a single-stat
+    // focus every season, or grew in a balanced way with no focus at all, both plateaued far
+    // below a believable peak (specialists topped out ~65-80 in their focus stat; balanced
+    // builds ~55-60 OVR). ageGrowthAttemptTaper multiplies how many training attempts a season
+    // gets — on top of applyPermanentStatDelta's own per-attempt success chance already easing
+    // off with age via ageGrowthBonus — so the extra attempts land almost entirely inside the
+    // 20s/prime and fall off hard afterward, keeping the career's peak inside the same 27~33
+    // window the aging-curve retune targets (see applyAgingDecline/ageGrowthBonus) instead of
+    // just pushing the ceiling further out into the mid-30s.
     var growthList=statList(p.position);
     var growthKeys=growthList.map(function(s){ return s.key; });
     var focusKey = (p.growthFocus && growthKeys.indexOf(p.growthFocus)>-1) ? p.growthFocus : null;
+    var ageTaper=ageGrowthAttemptTaper(p.age);
     var focusHits=0;
     if(focusKey){
-      var focusAttempts=roundClamp(1+Math.max(0,sf.perf)*2, 1, 3);
+      // A dedicated specialist gets a generous, mostly-reliable training pass on their chosen
+      // stat — enough seasons of committed training should realistically carry that one stat
+      // into the 90s by the player's prime, REGARDLESS of which stat was picked. Deliberately
+      // only lightly perf-sensitive (small +/-2 swing around a floor of 3) rather than swinging
+      // widely with sf.perf the way the general growth channel below does: sf.perf measures
+      // this season's actual box-score output against expectation, and seasonScoreBatter has
+      // no term at all for defense (and only a token one for speed) — so a defense (or speed)
+      // specialist's perf craters as their OVR outgrows a batting line that was never going to
+      // reflect defensive training, which used to spiral into starving exactly those specialists
+      // of the very training attempts their focus was supposed to guarantee. A dedicated season
+      // of training one stat should pay off close to equally no matter which stat it is.
+      var focusAttemptsRaw=clamp(5+sf.perf*2, 3, 7);
+      var focusAttempts=roundClamp(focusAttemptsRaw*ageTaper, 0, 8);
       for(var fi=0; fi<focusAttempts; fi++){
         var beforeF=p.stats[focusKey];
         applyPermanentStatDelta(p, focusKey, 1, 0.4);
@@ -2609,9 +2692,24 @@
       }
     }
 
-    // General, luck-driven growth from the season overall — smaller, and spread across
-    // any stat (including the focus stat again, occasionally).
-    var growthPoints=roundClamp(1+sf.perf*2, focusKey?0:1, focusKey?2:3);
+    // General, luck-driven growth from the season overall — spread across any stat (including
+    // the focus stat again, occasionally). For a player with NO fixed focus this is the ONLY
+    // growth channel they have, so on its own it has to be generous enough to carry a balanced
+    // build to a respectable (80+) peak OVR; a focused player still gets a much smaller slice
+    // of it on top of their dedicated training above.
+    // Same raw-floor-then-taper structure as focusAttempts above, and for the same reason: the
+    // no-focus channel needs a real floor during the prime (so a balanced build reliably climbs
+    // to its 80+ OVR target) WITHOUT that floor re-asserting itself after taper and guaranteeing
+    // a season always gets at least 1 attempt no matter how old the player is — that quiet
+    // forever-growth is exactly what made checkForcedRetirement's 방출 (forced release for
+    // sustained poor form) unreachable at any threshold, since aging decline could never get
+    // ahead of a growth channel that literally never hit zero. Applying the floor before taper
+    // and letting taper round the FINAL count down to a true 0 in old age fixes that while still
+    // giving prime-age growth its full strength.
+    var growthPointsRaw = focusKey ? clamp(1+sf.perf*2, 0, 3) : clamp(18+sf.perf*10, 2, 24);
+    var growthPoints = focusKey
+      ? roundClamp(growthPointsRaw*ageTaper, 0, 3)
+      : roundClamp(growthPointsRaw*ageTaper, 0, 24);
     for(var gi=0; gi<growthPoints; gi++){
       applyPermanentStatDelta(p, pick(growthKeys), 1);
     }
@@ -2688,9 +2786,78 @@
     if(sf.reason){
       html += '<hr class="divider"><p style="color:var(--danger);font-weight:700;">'+(sf.reason==='나이' ? '나이 기준을 넘어서 더 이상 선수 생활을 이어갈 수 없습니다.' : '2년 연속 부진으로 구단에서 방출되어 은퇴를 결정합니다.')+'</p>';
       html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-retire">은퇴식으로 이동</button></div>';
+    } else if((p.yearsToFA===undefined?3:p.yearsToFA)<=0){
+      html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-negotiation">FA 시장으로</button></div>';
     } else {
       html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-negotiation">연봉 협상으로</button></div>';
     }
+    openSeasonModal(html);
+  }
+
+  // Picks n distinct teams other than the player's current one — shared by the FA market and
+  // the negotiation-fallout rival offers so "multiple teams bidding" looks the same everywhere.
+  function pickRivalTeams(player, n){
+    var candidates=TEAMS.filter(function(t){ return !player.team || t.name!==player.team.name; });
+    candidates=candidates.slice();
+    candidates.sort(function(){ return Math.random()-0.5; });
+    return candidates.slice(0, Math.min(n, candidates.length));
+  }
+  // A rival club's opening FA bid: anchored to the player's real market value (salaryCeiling)
+  // rather than their current salary — a true bidding war can leapfrog what their own team was
+  // paying them — with real spread so different clubs value the same player differently, and a
+  // fan-approval bump since a popular player draws more competitive interest. Uses its own,
+  // looser cap (ceiling*1.6) instead of the standard capSalaryOffer's ceiling*1.08: that tighter
+  // cap is meant for a single team's negotiated raise, but here it kept clipping every rival
+  // bid to the exact same number, making 3 "different" offers read as identical — a real
+  // bidding war needs headroom to actually spread out.
+  function rivalFAOffer(player){
+    var ceiling=salaryCeiling(player);
+    var popularityBoost=1+((player.fanApproval||50)-50)/400;
+    var raw=Math.round(ceiling*rand(0.7,1.5)*popularityBoost);
+    return clamp(raw, 2700, Math.round(ceiling*1.6));
+  }
+
+  // Every 3 years (yearsToFA counts down to 0 in finishSeasonFlow) the player hits free agency
+  // instead of a normal one-team negotiation: their own club gets a loyalty-boosted retention
+  // offer (first crack at re-signing, same as real KBO FA rules), and several other clubs make
+  // competing bids — the player picks who to sign with.
+  function renderFAStep(){
+    var sf=state.seasonFlow, p=state.player;
+    var baseOffer=teamOfferSalary(p, sf.perf);
+    var loyaltyBonus=clamp((p.teamTenureYears||0)*0.012, 0, 0.10);
+    var stayOffer=capSalaryOffer(p, baseOffer*(1+loyaltyBonus));
+    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p)}; });
+    sf.fa={ stayOffer:stayOffer, rivals:rivals };
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 · FA(자유계약)</div><h2>'+esc(p.name)+', FA 시장에 나서다</h2>'+
+      '<p class="lede">3년간의 계약이 끝나 FA 자격을 얻었습니다. '+(p.team?esc(p.team.name):'현 소속팀')+'과 재계약하거나, 새로운 팀의 제안을 받아들일 수 있습니다.</p>'+
+      '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="stay">잔류 — '+(p.team?esc(p.team.name):'현 소속팀')+'과 '+fmtMoney(stayOffer)+'에 재계약</button>'+
+        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="'+i+'">이적 — '+esc(r.team.name)+'의 제안, '+fmtMoney(r.offer)+'</button>'; }).join('')+
+      '</div>'+
+      '<p class="lede" style="font-size:13px;margin-top:14px;">'+(p.team?esc(p.team.name):'현 소속팀')+'은 그동안의 활약을 감안해 우선 협상 혜택을 제공합니다.</p>';
+    openSeasonModal(html);
+  }
+
+  function resolveFA(choice){
+    var sf=state.seasonFlow, p=state.player, fa=sf.fa;
+    var narrative;
+    if(choice==='stay'){
+      p.salary=fa.stayOffer;
+      narrative=(p.team?p.team.name:'현 소속팀')+'과 '+fmtMoney(fa.stayOffer)+'에 잔류 계약을 맺었습니다.';
+      adjustFan(p, 6);
+    } else {
+      var idx=parseInt(choice,10);
+      var pick=fa.rivals[idx];
+      var newTeam=performTrade(p, 'FA 자격을 얻어', pick.team);
+      p.salary=pick.offer;
+      narrative='FA 시장에서 '+newTeam.name+'와(과) '+fmtMoney(pick.offer)+'에 새 계약을 맺었습니다.';
+      p.pendingTradeRequest=false; // the FA move already covers any pending "이적을 원한다" flag
+    }
+    p.yearsToFA=3;
+    p.highlights.push({year:p.careerYears, text:narrative});
+    var html = '<div class="eyebrow">FA 계약 결과</div><h2>'+esc(p.name)+'의 새 계약</h2>'+
+      '<p class="lede">'+esc(narrative)+'</p>'+
+      '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-advance">다음 시즌으로</button></div>';
     openSeasonModal(html);
   }
 
@@ -2759,26 +2926,30 @@
   function renderNegotiationFalloutChoice(offer){
     var sf=state.seasonFlow, p=state.player;
     var paycutOffer=Math.max(2700, Math.round(offer*0.78));
-    var candidates=TEAMS.filter(function(t){ return !p.team || t.name!==p.team.name; });
-    var rivalTeam=candidates[randInt(0,candidates.length-1)];
-    var rivalOffer=capSalaryOffer(p, offer*rand(0.92,1.28));
-    sf.fallout={ paycutOffer:paycutOffer, rivalTeam:rivalTeam, rivalOffer:rivalOffer };
+    // Multiple clubs circle a player once word gets out a negotiation broke down — not just
+    // one rival offer, so there's a real choice of destination, not just yes/no on a single
+    // team. Reuses the same market-value-anchored bidding logic as the FA market (rivalFAOffer)
+    // rather than a tight percentage of the ORIGINAL team's offer, so the rival bids actually
+    // spread out instead of all clipping to the same capped number.
+    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p)}; });
+    sf.fallout={ paycutOffer:paycutOffer, rivals:rivals };
     var html = '<div class="eyebrow">'+p.careerYears+'년차 연봉 협상 · 결렬</div><h2>무리한 요구에 구단이 등을 돌렸습니다</h2>'+
-      '<p class="lede">'+esc(p.team?p.team.name:'구단')+'은(는) 더 이상의 인상 요구를 받아들이지 않기로 했습니다. 어떻게 하시겠습니까?</p>'+
+      '<p class="lede">'+esc(p.team?p.team.name:'구단')+'은(는) 더 이상의 인상 요구를 받아들이지 않기로 했습니다. 소식을 들은 다른 구단들도 관심을 보이고 있습니다. 어떻게 하시겠습니까?</p>'+
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
         '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="stay">잔류를 택한다 — 삭감된 '+fmtMoney(paycutOffer)+'에 재계약</button>'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="move">'+esc(rivalTeam.name)+'의 이적 제안을 수락한다 — '+fmtMoney(rivalOffer)+'</button>'+
+        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="'+i+'">'+esc(r.team.name)+'의 이적 제안을 수락한다 — '+fmtMoney(r.offer)+'</button>'; }).join('')+
       '</div>'+
-      '<p class="lede" style="font-size:13px;margin-top:14px;">이적을 택하면 곧바로 '+esc(rivalTeam.name)+' 소속으로 다음 시즌을 맞이합니다.</p>';
+      '<p class="lede" style="font-size:13px;margin-top:14px;">이적을 택하면 곧바로 해당 팀 소속으로 다음 시즌을 맞이합니다.</p>';
     openSeasonModal(html);
   }
 
   function resolveNegotiationFallout(choice){
     var sf=state.seasonFlow, p=state.player, fo=sf.fallout;
     var narrative;
-    if(choice==='move'){
-      var newTeam=performTrade(p, '무리한 연봉 요구 끝에', fo.rivalTeam);
-      p.salary=fo.rivalOffer;
+    if(choice!=='stay'){
+      var pick=fo.rivals[parseInt(choice,10)];
+      var newTeam=performTrade(p, '무리한 연봉 요구 끝에', pick.team);
+      p.salary=pick.offer;
       // A trade already just happened here — if trade_rumor also left pendingTradeRequest
       // set earlier this same season, that request's intent (leave the team) has already
       // been satisfied by this one, so consume it now. Otherwise finalizeNegotiationNarrative
@@ -2787,7 +2958,7 @@
       // that second trade's candidate pool could send them right back to the team they just
       // left in this trade.
       p.pendingTradeRequest=false;
-      narrative='새 소속팀 '+newTeam.name+'와(과) '+fmtMoney(fo.rivalOffer)+'에 계약했습니다.';
+      narrative='새 소속팀 '+newTeam.name+'와(과) '+fmtMoney(pick.offer)+'에 계약했습니다.';
     } else {
       p.salary=fo.paycutOffer;
       narrative='한 발 물러나 삭감된 '+fmtMoney(fo.paycutOffer)+'에 잔류 계약을 맺었습니다.';
@@ -2827,6 +2998,7 @@
     p.age+=1;
     p.careerYears+=1;
     p.teamTenureYears=(p.teamTenureYears||0)+1;
+    p.yearsToFA=(p.yearsToFA===undefined?3:p.yearsToFA)-1;
     applyAgingDecline(p);
     p.growthFocus=null;
     state.seasonFlow=null;
@@ -2918,7 +3090,8 @@
         growthFocus:null, history:[], careerScore:0,
         lowFormYears:0, awardsAll:[], highlights:[], isRetired:false,
         fanApproval:50, isDH:false, pendingTradeRequest:false,
-        teamTenureYears:0, tradeCount:0, severeInjuryCount:0, totalEarnings:0
+        teamTenureYears:0, tradeCount:0, severeInjuryCount:0, totalEarnings:0,
+        yearsToFA:3
       };
       state.hsResult=null;
       state.screen='highschool';
@@ -2955,9 +3128,14 @@
     else if(action==='event-choice'){ resolveEventChoice(parseInt(el.getAttribute('data-choice'),10)); return; }
     else if(action==='event-next'){ advanceEventStep(); return; }
     else if(action==='season-to-awards'){ state.seasonFlow.step='awards'; renderAwardsStep(); return; }
-    else if(action==='season-to-negotiation'){ state.seasonFlow.step='negotiation'; renderNegotiationStep(); return; }
+    else if(action==='season-to-negotiation'){
+      if((p.yearsToFA===undefined?3:p.yearsToFA)<=0){ state.seasonFlow.step='fa'; renderFAStep(); }
+      else { state.seasonFlow.step='negotiation'; renderNegotiationStep(); }
+      return;
+    }
     else if(action==='negotiate'){ resolveNegotiation(el.getAttribute('data-stance')); return; }
     else if(action==='negotiate-fallout'){ resolveNegotiationFallout(el.getAttribute('data-choice')); return; }
+    else if(action==='resolve-fa'){ resolveFA(el.getAttribute('data-choice')); return; }
     else if(action==='season-to-retire'){ finishSeasonFlow(); return; }
     else if(action==='season-to-advance'){ finishSeasonFlow(); return; }
     else if(action==='ask-retire'){
