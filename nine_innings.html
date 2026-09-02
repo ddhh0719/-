@@ -1,0 +1,3008 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>나인 이닝즈</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap">
+<style>
+  :root{
+    --bg:#eef1e6;
+    --bg-elevated:#ffffff;
+    --surface:#e3e8d8;
+    --ink:#17233a;
+    --ink-dim:#5b6678;
+    --line:#c9d0bb;
+    --accent:#b97a0c;
+    --accent-ink:#1a1206;
+    --turf:#2f6f4c;
+    --clay:#a9673a;
+    --danger:#a83a29;
+    --good:#2f6f4c;
+    --led-glow:none;
+    --font-display:'Black Han Sans','Malgun Gothic',sans-serif;
+    --font-body:'Gothic A1','Malgun Gothic',sans-serif;
+    --font-mono:'Space Mono','Courier New',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d1626;
+      --bg-elevated:#121f34;
+      --surface:#16233c;
+      --ink:#eef2ea;
+      --ink-dim:#9aa8bf;
+      --line:#263a58;
+      --accent:#f2b134;
+      --accent-ink:#1a1206;
+      --turf:#4d9a6d;
+      --clay:#c17b46;
+      --danger:#e2584a;
+      --good:#4d9a6d;
+      --led-glow:0 0 6px rgba(242,177,52,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1626;
+    --bg-elevated:#121f34;
+    --surface:#16233c;
+    --ink:#eef2ea;
+    --ink-dim:#9aa8bf;
+    --line:#263a58;
+    --accent:#f2b134;
+    --accent-ink:#1a1206;
+    --turf:#4d9a6d;
+    --clay:#c17b46;
+    --danger:#e2584a;
+    --good:#4d9a6d;
+    --led-glow:0 0 6px rgba(242,177,52,.5);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      repeating-linear-gradient(115deg, rgba(127,127,127,0.05) 0px, rgba(127,127,127,0.05) 40px, transparent 40px, transparent 80px),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    line-height:1.55;
+  }
+  h1,h2,h3{font-family:var(--font-display);font-weight:400;letter-spacing:.01em;text-wrap:balance;margin:0 0 .4em;}
+  p{margin:0 0 1em;}
+  .hidden{display:none !important;}
+  button{font-family:inherit;}
+  ::selection{background:var(--accent);color:var(--accent-ink);}
+
+  /* ---------- scoreboard header ---------- */
+  #scoreboard-bar{
+    position:sticky;top:0;z-index:20;
+    background:var(--bg-elevated);
+    border-bottom:3px solid var(--turf);
+    /* forces its own compositing layer — avoids a common mobile Safari glitch where
+       sticky headers briefly let scrolled content paint above them */
+    transform:translateZ(0);
+    -webkit-transform:translateZ(0);
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+  }
+  .sb-inner{
+    max-width:920px;margin:0 auto;
+    padding:14px max(20px, env(safe-area-inset-right)) 14px max(20px, env(safe-area-inset-left));
+    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  }
+  .sb-logo{
+    display:flex;align-items:center;gap:8px;
+    font-family:var(--font-display);font-size:19px;letter-spacing:.02em;
+  }
+  .sb-logo svg{width:22px;height:22px;flex:none;}
+  .sb-player-info{
+    font-family:var(--font-mono);font-size:13px;color:var(--accent);
+    text-shadow:var(--led-glow);
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  }
+  .sb-sep{color:var(--ink-dim);text-shadow:none;}
+
+  /* ---------- layout ---------- */
+  #stage{
+    max-width:920px;margin:0 auto;
+    padding:28px max(20px, env(safe-area-inset-right)) max(80px, calc(24px + env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
+  }
+  .card{
+    background:var(--bg-elevated);border:1px solid var(--line);border-radius:10px;
+    padding:26px 26px 24px;margin-bottom:22px;
+  }
+  .card + .card{margin-top:0;}
+  .eyebrow{
+    font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--turf);margin-bottom:8px;
+  }
+  .lede{color:var(--ink-dim);max-width:60ch;}
+
+  /* ---------- buttons & inputs ---------- */
+  .btn{
+    font-weight:700;padding:12px 22px;border-radius:6px;border:2px solid transparent;
+    cursor:pointer;font-size:15px;transition:filter .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-outline{background:transparent;border-color:var(--line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-danger{background:transparent;border-color:var(--danger);color:var(--danger);}
+  .btn-danger:hover{background:var(--danger);color:#fff;}
+  .btn:disabled{opacity:.35;cursor:not-allowed;filter:none;}
+  .btn:focus-visible, .choice-card:focus-visible, .chip:focus-visible, .tab-btn:focus-visible, .adjust-btn:focus-visible{
+    outline:3px solid var(--accent);outline-offset:2px;
+  }
+  .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;}
+  input[type="text"]{
+    font-family:var(--font-body);font-size:16px;padding:11px 14px;border-radius:6px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);width:100%;max-width:280px;
+    min-width:0;flex:1 1 auto;
+  }
+  input[type="text"]:focus-visible{outline:3px solid var(--accent);outline-offset:1px;}
+  label{display:block;font-family:var(--font-mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px;}
+
+  /* ---------- choice cards / chips ---------- */
+  .choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .choice-card{
+    border:2px solid var(--line);border-radius:8px;padding:18px;background:var(--surface);
+    cursor:pointer;text-align:left;
+  }
+  .choice-card h3{font-size:20px;margin-bottom:4px;}
+  .choice-card p{margin:0;color:var(--ink-dim);font-size:13px;}
+  .choice-card.selected{border-color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, var(--surface));}
+  .chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{
+    border:1.5px solid var(--line);border-radius:20px;padding:7px 16px;background:var(--surface);
+    color:var(--ink);cursor:pointer;font-size:13px;font-weight:700;
+  }
+  .chip.selected{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);}
+
+  /* ---------- stat bars ---------- */
+  .stat-row{margin-bottom:16px;}
+  .stat-row-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .stat-name{font-size:14px;font-weight:700;}
+  .stat-value{font-family:var(--font-mono);font-size:14px;color:var(--ink-dim);}
+  .stat-value b{color:var(--ink);font-size:16px;}
+  .stat-track{position:relative;height:10px;background:var(--surface);border:1px solid var(--line);border-radius:3px;overflow:visible;}
+  .stat-fill{position:absolute;inset:0;width:0%;border-radius:2px;background:linear-gradient(90deg,var(--turf),var(--accent));transition:width .5s ease;}
+  .stat-cap{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--danger);}
+  .stat-adjust{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;}
+  .adjust-btn{
+    min-width:38px;height:38px;padding:0 10px;border-radius:19px;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink);font-family:var(--font-mono);font-size:14px;line-height:1;cursor:pointer;
+  }
+  .adjust-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .adjust-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* ---------- hub layout ---------- */
+  /* minmax(0, ...) instead of a bare 280px/1fr — a plain 1fr track won't shrink below the
+     min-content width of what's inside it, so a wide stats table on the 기록실 tab was
+     blowing out the whole grid (and the player card beside it) past the viewport on phones,
+     forcing sideways scrolling/landscape just to see the hub. minmax(0, ...) lets the track
+     — and everything sharing it — actually shrink to fit, so the table's own horizontal
+     scrollbar (.table-wrap) is what handles overflow instead of the whole page layout. */
+  .hub-grid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start;}
+  .hub-main{min-width:0;}
+  /* Base rule must come BEFORE the mobile media query below — same specificity, so
+     whichever is declared later in the stylesheet wins regardless of which media query
+     matched. Having this after the @media block (as it was) meant the mobile override
+     never actually applied: the player card stayed sticky on phones and visually froze
+     in place while the rest of the hub scrolled underneath it. */
+  .player-card{position:sticky;top:78px;min-width:0;}
+  @media (max-width:700px){
+    .hub-grid{grid-template-columns:minmax(0,1fr);}
+    .player-card{position:static;top:auto;}
+  }
+  .pc-head{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .team-badge{
+    width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-size:18px;color:#fff;flex:none;
+  }
+  .pc-name{font-family:var(--font-display);font-size:22px;}
+  .pc-sub{font-family:var(--font-mono);font-size:12px;color:var(--ink-dim);}
+  .ovr-badge{
+    display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+    width:56px;height:56px;border-radius:50%;border:2px solid var(--accent);margin-bottom:16px;
+  }
+  .ovr-badge .n{font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--accent);text-shadow:var(--led-glow);}
+  .ovr-badge .l{font-size:9px;color:var(--ink-dim);letter-spacing:.08em;}
+  .pc-meta{font-family:var(--font-mono);font-size:13px;color:var(--ink-dim);margin-bottom:18px;}
+  .pc-meta div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line);}
+
+  .tabbar{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:22px;}
+  .tab-btn{
+    padding:10px 18px;font-family:var(--font-display);font-size:15px;letter-spacing:.02em;
+    background:none;border:none;color:var(--ink-dim);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;
+  }
+  .tab-btn.active{color:var(--ink);border-bottom-color:var(--accent);}
+
+  .points-readout{
+    font-family:var(--font-mono);font-size:15px;color:var(--ink-dim);
+    display:flex;align-items:center;gap:10px;margin-bottom:18px;
+  }
+  .points-readout b{font-size:26px;color:var(--accent);text-shadow:var(--led-glow);}
+
+  /* ---------- tables & logs ---------- */
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12.5px;}
+  th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;}
+  th{color:var(--ink-dim);font-weight:700;text-align:right;}
+  th:first-child,td:first-child{text-align:left;}
+  tbody tr:hover{background:var(--surface);}
+
+  .log-item{padding:10px 0;border-bottom:1px dashed var(--line);font-size:14px;}
+  .log-item:last-child{border-bottom:none;}
+  .log-item .tag{font-family:var(--font-mono);font-size:11px;color:var(--turf);margin-right:6px;}
+
+  .award-pill{
+    display:inline-block;background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);
+    font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;margin:2px 5px 2px 0;
+  }
+
+  /* ---------- modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(8,12,20,.6);display:flex;align-items:center;justify-content:center;
+    padding:max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    z-index:50;
+  }
+  .modal-panel{
+    background:var(--bg-elevated);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;
+    max-height:86vh;max-height:86dvh;overflow-y:auto;padding:26px;
+  }
+
+  .stat-line-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:14px;margin:18px 0;}
+  .stat-line-cell{text-align:center;}
+  .stat-line-cell .v{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--accent);text-shadow:var(--led-glow);}
+  .stat-line-cell .l{font-size:11px;color:var(--ink-dim);}
+  .avg-kr{font-size:11px;color:var(--ink-dim);}
+
+  .divider{height:1px;background:var(--line);margin:22px 0;border:none;}
+
+  footer.hint{color:var(--ink-dim);font-size:12px;text-align:center;margin-top:30px;}
+
+  /* ---------- narrow phones: trim the least-essential record-table columns instead of
+     forcing the whole table (and page) to need horizontal scrolling / landscape ---------- */
+  @media (max-width:560px){
+    .col-team{display:none;}
+  }
+  @media (max-width:460px){
+    /* losses is the least useful pitcher counting stat to keep on-screen — wins/saves/holds
+       carry the story — so it's the first pitcher-only column to go, ahead of age. */
+    .col-losses{display:none;}
+  }
+  @media (max-width:400px){
+    .col-age{display:none;}
+  }
+
+  /* ---------- small phones ---------- */
+  @media (max-width:480px){
+    #stage{padding:20px max(14px, env(safe-area-inset-right)) max(70px, calc(20px + env(safe-area-inset-bottom))) max(14px, env(safe-area-inset-left));}
+    .card{padding:20px 18px;}
+    .choice-grid{grid-template-columns:1fr;}
+    .modal-panel{padding:20px;}
+    .sb-logo{font-size:16px;}
+    .sb-player-info{font-size:11px;}
+    .stat-line-grid{grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:10px;}
+    .stat-line-cell .v{font-size:19px;}
+    input[type="text"]{max-width:none;}
+    .btn{padding:11px 16px;font-size:14px;}
+    .btn-row{gap:10px;}
+    table{font-size:11.5px;}
+    th,td{padding:7px 8px;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important;}
+  }
+</style>
+
+<div id="app">
+  <header id="scoreboard-bar">
+    <div class="sb-inner">
+      <div class="sb-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9.4"/><path d="M5.2 7.4c2 1.6 2 8 0 9.6M18.8 7.4c-2 1.6-2 8 0 9.6" stroke-dasharray="1.6 2.2" stroke-linecap="round"/></svg>
+        <span>나인 이닝즈</span>
+      </div>
+      <div id="sb-player-info" class="sb-player-info hidden"></div>
+    </div>
+  </header>
+
+  <main id="stage">
+
+    <!-- TITLE -->
+    <section id="screen-title" class="screen">
+      <div class="card" style="text-align:center;padding:52px 26px;">
+        <div class="eyebrow">텍스트 확률 기반 커리어 시뮬레이션</div>
+        <h1 style="font-size:clamp(28px,8vw,44px);">나인 이닝즈</h1>
+        <p class="lede" style="margin:0 auto 26px;">
+          고교 3학년 마지막 시즌부터 은퇴까지 — 드래프트, 훈련, 부상, 시즌 성적까지 오직 확률과 선택으로 채워가는
+          나만의 야구 인생.
+        </p>
+        <div class="btn-row" style="justify-content:center;">
+          <button class="btn btn-primary" data-action="new-game">새 커리어 시작</button>
+          <button class="btn btn-outline hidden" id="btn-continue" data-action="continue-game">이어하기</button>
+          <button class="btn btn-outline" data-action="open-archive">선수 기록 보관소</button>
+        </div>
+        <p id="continue-hint" class="lede hidden" style="margin-top:16px;font-size:13px;"></p>
+      </div>
+    </section>
+
+    <!-- ARCHIVE -->
+    <section id="screen-archive" class="screen hidden">
+      <div class="card" id="archive-card"></div>
+    </section>
+
+    <!-- CREATE -->
+    <section id="screen-create" class="screen hidden">
+      <div class="card">
+        <div class="eyebrow">STEP 1 · 선수 생성</div>
+        <h2>어떤 선수가 되고 싶나요?</h2>
+
+        <label for="input-name">이름</label>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:22px;">
+          <input type="text" id="input-name" maxlength="8" placeholder="예: 김도현">
+          <button class="btn btn-outline" type="button" data-action="random-name">무작위</button>
+        </div>
+
+        <label>포지션</label>
+        <div class="choice-grid" style="margin-bottom:16px;">
+          <div class="choice-card" id="choice-batter" data-action="choose-position" data-pos="batter" tabindex="0" role="button">
+            <h3>타자</h3>
+            <p>파워 · 정확 · 주력 · 수비 · 멘탈로 타석에서 승부합니다.</p>
+          </div>
+          <div class="choice-card" id="choice-pitcher" data-action="choose-position" data-pos="pitcher" tabindex="0" role="button">
+            <h3>투수</h3>
+            <p>구속 · 제구 · 변화구 · 체력 · 멘탈로 마운드를 지킵니다.</p>
+          </div>
+        </div>
+
+        <div id="subrole-wrap" class="hidden" style="margin-bottom:22px;">
+          <label id="subrole-label">수비 포지션</label>
+          <div class="chip-row" id="subrole-chips"></div>
+        </div>
+
+        <hr class="divider">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+          <label style="margin:0;">신인 능력치 배분</label>
+          <span class="points-readout" id="alloc-readout" style="margin:0;"></span>
+        </div>
+        <p class="lede" style="font-size:13px;margin-bottom:14px;">총 220포인트를 5개 능력치에 자유롭게 배분하세요. 신인은 아직 완성형이 아니라 각 능력치는 최대 70까지만 찍을 수 있고, 그 이상은 프로 무대에서의 활약과 훈련으로 직접 키워야 합니다.</p>
+        <div id="create-stats"></div>
+        <div class="btn-row" style="margin-bottom:8px;">
+          <button class="btn btn-outline" data-action="create-auto-allocate">균등 분배</button>
+          <button class="btn btn-outline" data-action="create-reset-allocate">초기화</button>
+        </div>
+        <p class="lede" id="alloc-hint" style="font-size:13px;color:var(--danger);"></p>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" data-action="confirm-create" id="btn-confirm-create">고교 3학년 시작</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- HIGH SCHOOL -->
+    <section id="screen-highschool" class="screen hidden">
+      <div class="card">
+        <div class="eyebrow">STEP 2 · 고교 3학년</div>
+        <h2 id="hs-title"></h2>
+        <p class="lede" id="hs-intro"></p>
+        <div id="hs-result" class="hidden">
+          <hr class="divider">
+          <div class="stat-line-grid" id="hs-stat-grid"></div>
+          <p id="hs-comment" class="lede"></p>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-hs-action" data-action="start-hs-season">고3 마지막 시즌 시작</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DRAFT -->
+    <section id="screen-draft" class="screen hidden">
+      <div class="card">
+        <div class="eyebrow">STEP 3 · 신인 드래프트</div>
+        <h2 id="draft-title"></h2>
+        <div id="draft-body"></div>
+        <div class="btn-row" id="draft-actions"></div>
+      </div>
+    </section>
+
+    <!-- HUB -->
+    <section id="screen-hub" class="screen hidden">
+      <div class="hub-grid">
+        <div class="card player-card" id="player-card"></div>
+        <div class="hub-main">
+          <div class="tabbar">
+            <button class="tab-btn" data-action="switch-tab" data-tab="player">훈련 &amp; 시즌</button>
+            <button class="tab-btn" data-action="switch-tab" data-tab="records">기록실</button>
+          </div>
+          <div id="tab-player" class="card"></div>
+          <div id="tab-records" class="card hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ENDING -->
+    <section id="screen-ending" class="screen hidden">
+      <div class="card" id="ending-card"></div>
+    </section>
+
+  </main>
+</div>
+
+<div id="modal-season" class="modal-overlay hidden">
+  <div class="modal-panel" id="modal-season-panel"></div>
+</div>
+
+<div id="modal-confirm" class="modal-overlay hidden">
+  <div class="modal-panel" id="modal-confirm-panel"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(sel, root){ return (root||document).querySelector(sel); };
+  var $$ = function(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); };
+
+  /* ---------------- utils ---------------- */
+  function rand(min,max){ return Math.random()*(max-min)+min; }
+  function randInt(min,max){ return Math.floor(rand(min,max+1)); }
+  function pick(arr){ return arr[randInt(0,arr.length-1)]; }
+  function clamp(v,lo,hi){ return Math.min(hi,Math.max(lo,v)); }
+  function roundClamp(v,lo,hi){ return clamp(Math.round(v),lo,hi); }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function formatAvg(avg){
+    if(!isFinite(avg) || avg<0) avg=0;
+    var th = Math.round(avg*1000);
+    return '.'+String(th).padStart(3,'0');
+  }
+  function formatAvgKR(avg){
+    if(!isFinite(avg) || avg<0) avg=0;
+    var th = Math.round(avg*1000);
+    var hal = Math.floor(th/100), pun=Math.floor((th%100)/10), ri=th%10;
+    return hal+'할'+pun+'푼'+ri+'리';
+  }
+  function fmtNum(n){ return Math.round(n).toLocaleString('ko-KR'); }
+  function fmtMoney(v){
+    if(v>=10000){
+      var eok = v/10000;
+      var s = (Math.round(eok*100)/100).toString();
+      return s+'억원';
+    }
+    return fmtNum(v)+'만원';
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  /* ---------------- static data ---------------- */
+  var TEAMS = [
+    {name:'서울 코메츠', color:'#3b6fd6'},
+    {name:'인천 실버웨일스', color:'#2f8f9d'},
+    {name:'수원 팰컨스', color:'#5a5fc7'},
+    {name:'대전 볼케이노스', color:'#c1552c'},
+    {name:'대구 스콜피온스', color:'#a33b52'},
+    {name:'부산 타이푼스', color:'#1f7a5c'},
+    {name:'광주 파이오니어스', color:'#b8841f'},
+    {name:'창원 로켓츠', color:'#6a4fb0'},
+    {name:'청주 그리폰스', color:'#3d8c40'},
+    {name:'제주 드래곤테일즈', color:'#b23a6e'}
+  ];
+  // Real KBO all-time career leaderboards (top 10 per category), used only to place a
+  // simulated career's counting stats in context on the retirement screen. Figures are
+  // recent-season snapshots — active players' real totals may have grown further since.
+  var KBO_RECORDS = {
+    wins: { label:'다승', unit:'승', list:[
+      {name:'송진우',value:210},{name:'양현종',value:179},{name:'김광현',value:171},
+      {name:'정민철',value:161},{name:'이강철',value:152},{name:'선동열',value:146},
+      {name:'배영수',value:138},{name:'윤성환',value:135},{name:'김원형',value:134},
+      {name:'장원준',value:132}
+    ]},
+    strikeouts: { label:'탈삼진', unit:'개', list:[
+      {name:'양현종',value:2175},{name:'송진우',value:2048},{name:'김광현',value:2003},
+      {name:'이강철',value:1751},{name:'선동열',value:1698},{name:'정민철',value:1661},
+      {name:'류현진',value:1482},{name:'임창용',value:1474},{name:'배영수',value:1436},
+      {name:'김수경',value:1370}
+    ]},
+    saves: { label:'세이브', unit:'개', list:[
+      {name:'오승환',value:427},{name:'손승락',value:271},{name:'임창용',value:258},
+      {name:'김용수',value:227},{name:'구대성',value:214},{name:'정우람',value:197},
+      {name:'진필중',value:191},{name:'김재윤',value:190},{name:'이용찬',value:173},
+      {name:'김원중',value:163}
+    ]},
+    holds: { label:'홀드', unit:'개', list:[
+      {name:'김진성',value:178},{name:'안지만',value:177},{name:'권혁',value:159},
+      {name:'진해수',value:157},{name:'정우람',value:145},{name:'김태혁',value:140},
+      {name:'노경은',value:130},{name:'구승민',value:122},{name:'우규민',value:122},
+      {name:'류택현',value:122}
+    ]},
+    hits: { label:'안타', unit:'개', list:[
+      {name:'손아섭',value:2616},{name:'최형우',value:2576},{name:'김현수',value:2524},
+      {name:'박용택',value:2504},{name:'최정',value:2343},{name:'양준혁',value:2318},
+      {name:'김태균',value:2209},{name:'이대호',value:2199},{name:'박한이',value:2174},
+      {name:'정성훈',value:2159}
+    ]},
+    homeRuns: { label:'홈런', unit:'개', list:[
+      {name:'최정',value:517},{name:'이승엽',value:467},{name:'박병호',value:418},
+      {name:'최형우',value:418},{name:'이대호',value:374},{name:'양준혁',value:351},
+      {name:'강민호',value:350},{name:'심정수',value:328},{name:'이범호',value:327},
+      {name:'박경완',value:314}
+    ]},
+    rbi: { label:'타점', unit:'점', list:[
+      {name:'최형우',value:1733},{name:'최정',value:1619},{name:'김현수',value:1518},
+      {name:'이승엽',value:1498},{name:'이대호',value:1425},{name:'양준혁',value:1389},
+      {name:'김태균',value:1358},{name:'강민호',value:1309},{name:'박병호',value:1309},
+      {name:'이호준',value:1265}
+    ]},
+    steals: { label:'도루', unit:'개', list:[
+      {name:'전준호',value:549},{name:'이종범',value:510},{name:'이대형',value:505},
+      {name:'정수근',value:474},{name:'박해민',value:458},{name:'이용규',value:397},
+      {name:'김주찬',value:388},{name:'이순철',value:371},{name:'정근우',value:371},
+      {name:'김일권',value:363}
+    ]}
+  };
+
+  // Given a career total, find its neighbors in a KBO_RECORDS[...].list (sorted highest-first).
+  function findKboNeighbors(list, value){
+    for(var i=0;i<list.length;i++){
+      if(value>=list[i].value){
+        if(i===0) return {aboveTop:true, top:list[0], tie:value===list[0].value};
+        // An exact tie with a lower-ranked entry was previously falling through to the
+        // above/below case and rendering as "바로 아래: X" (just below X) even though the
+        // value is identical to X's — a tie at rank 1 already got its own message, this
+        // covers the same situation at every other rank.
+        return {above:list[i-1], below:list[i], tie:value===list[i].value};
+      }
+    }
+    return {belowAll:true, last:list[list.length-1]};
+  }
+
+  var SURNAMES = ['김','이','박','최','정','강','조','윤','장','임','오','한','신','서','권','황','안','송','전','홍'];
+  var GIVEN1 = ['민','서','지','현','준','도','우','하','수','재','태','건','유','성','승','진','윤','기','상','동'];
+  var GIVEN2 = ['준','우','호','민','현','석','훈','영','철','수','원','율','한','빈','오','진','혁','규','안','솔'];
+  function randomName(){ return pick(SURNAMES)+pick(GIVEN1)+pick(GIVEN2); }
+
+  var BATTER_STATS = [
+    {key:'power',   label:'파워'},
+    {key:'contact', label:'정확'},
+    {key:'speed',   label:'주력'},
+    {key:'defense', label:'수비'},
+    {key:'mental',  label:'멘탈'}
+  ];
+  var PITCHER_STATS = [
+    {key:'velocity', label:'구속'},
+    {key:'control',  label:'제구'},
+    {key:'breaking', label:'변화구'},
+    {key:'stamina',  label:'체력'},
+    {key:'mental',   label:'멘탈'}
+  ];
+  function statList(position){ return position==='pitcher' ? PITCHER_STATS : BATTER_STATS; }
+
+  var BATTER_SUBROLES = ['포수','1루수','2루수','3루수','유격수','좌익수','중견수','우익수'];
+  var PITCHER_SUBROLES = ['선발','불펜','마무리'];
+
+  var STAT_FLOOR = 10;          // minimum any starting stat can be brought down to
+  var ALLOC_BUDGET = 220;       // total points a new player distributes across their 5 starting stats
+  var CREATE_STAT_CAP = 70;     // no stat can start above this — growth has to be earned in the pros
+
+  /* ---------------- core formulas ---------------- */
+  function overall(player){
+    var s = player.stats;
+    if(player.position==='pitcher'){
+      if(player.subrole==='선발'){
+        // starters live and die by durability — stamina matters far more here than for a reliever.
+        return Math.round(s.velocity*0.22+s.control*0.28+s.breaking*0.20+s.stamina*0.22+s.mental*0.08);
+      }
+      if(player.subrole==='마무리'){
+        // closers face a handful of hitters at max effort — stuff and nerve matter, stamina barely does.
+        return Math.round(s.velocity*0.32+s.control*0.26+s.breaking*0.24+s.stamina*0.06+s.mental*0.12);
+      }
+      // 불펜 (middle relief / setup) sits between the two.
+      return Math.round(s.velocity*0.28+s.control*0.28+s.breaking*0.22+s.stamina*0.12+s.mental*0.10);
+    }
+    if(player.isDH){
+      return Math.round(s.power*0.34+s.contact*0.36+s.speed*0.12+s.defense*0.04+s.mental*0.14);
+    }
+    return Math.round(s.power*0.28+s.contact*0.30+s.speed*0.16+s.defense*0.16+s.mental*0.10);
+  }
+
+  function freshAllocation(position){
+    var stats={};
+    statList(position).forEach(function(s){ stats[s.key]=STAT_FLOOR; });
+    return stats;
+  }
+
+  // Retuned so the career actually peaks inside a 27~33 prime instead of still climbing into
+  // the mid-30s: real decline now starts right as the prime ends (31, not 34), and each band
+  // hits a bit harder than before so it reliably outweighs the residual growth chance that
+  // never fully goes to zero (applyPermanentStatDelta has a 12% floor at any age).
+  function applyAgingDecline(player){
+    var age=player.age, dropStats=0, lo=0, hi=0;
+    if(age>=40){ dropStats=3; lo=2; hi=5; }
+    else if(age>=37){ dropStats=3; lo=2; hi=4; }
+    else if(age>=34){ dropStats=3; lo=1; hi=3; }
+    else if(age>=31){ dropStats=2; lo=1; hi=2; }
+    else return;
+    var keys = statList(player.position).map(function(s){ return s.key; });
+    keys.sort(function(){ return Math.random()-0.5; });
+    for(var i=0;i<dropStats && i<keys.length;i++){
+      var k=keys[i];
+      player.stats[k]=roundClamp(player.stats[k]-randInt(lo,hi),10,99);
+    }
+  }
+
+  function simulateHighSchoolSeason(player){
+    var ovr=overall(player), games=randInt(18,24), summary, score;
+    if(player.position==='batter'){
+      var ab=games*randInt(3,4);
+      var avg=clamp(0.220+(player.stats.contact/99)*0.220+rand(-0.03,0.05),0.180,0.520);
+      var h=Math.round(ab*avg);
+      var hr=Math.round(h*(player.stats.power/99)*rand(0.05,0.22));
+      h=Math.max(h,hr);
+      summary={games:games, ab:ab, h:h, hr:hr, avg:h/(ab||1)};
+      score = ovr + (h/(ab||1)-0.28)*120 + hr*1.5 + rand(-8,8);
+    } else {
+      var ip = Math.round(games*rand(4,6));
+      var era = clamp(5.0-(player.stats.control/99)*2.6-(player.stats.velocity/99)*1.6+rand(-0.6,0.8),0.5,7.5);
+      var k9 = clamp(5+(player.stats.velocity/99)*8+rand(-1,1),3,16);
+      var k = Math.round(ip/9*k9);
+      summary={games:games, ip:ip, era:era, k:k};
+      score = ovr + (4.0-era)*14 + k*0.4 + rand(-8,8);
+    }
+    return {summary:summary, score:clamp(score,0,140)};
+  }
+
+  function scoutGrade(score){
+    if(score>=105) return {grade:'S', label:'초특급 유망주'};
+    if(score>=90)  return {grade:'A', label:'1라운드급 유망주'};
+    if(score>=75)  return {grade:'B', label:'중상위 라운드 유망주'};
+    if(score>=58)  return {grade:'C', label:'중하위 라운드 유망주'};
+    if(score>=40)  return {grade:'D', label:'육성선수급'};
+    return {grade:'F', label:'지명 안정권 밖'};
+  }
+
+  function runDraft(score){
+    if(score<40) return {drafted:false};
+    var round;
+    if(score>=105) round=1;
+    else if(score>=90) round=randInt(1,2);
+    else if(score>=75) round=randInt(2,4);
+    else if(score>=58) round=randInt(4,7);
+    else round=randInt(7,10);
+    var pickNo=randInt(1,10);
+    var team=TEAMS[randInt(0,TEAMS.length-1)];
+    var bonus=Math.max(2800, Math.round((11-round)*7800+rand(-1400,1400)));
+    return {drafted:true, round:round, pick:pickNo, team:team, bonus:bonus};
+  }
+
+  function startingSalary(draftResult){
+    if(!draftResult.drafted) return 2700;
+    return Math.round(3000+(11-draftResult.round)*420);
+  }
+
+  // Recompute every stat that's derived from the raw counting numbers — used both right
+  // after a season simulates and after any event applies a direct box-score adjustment
+  // (lineBoost), so the box score always stays internally consistent (avg always matches
+  // h/ab, OPS always matches obp+slg, etc).
+  function recomputeBatterDerived(line){
+    line.h = Math.max(0, Math.round(line.h));
+    line.hr = Math.max(0, Math.round(line.hr));
+    line.h = Math.max(line.h, line.hr);
+    line.doubles = Math.max(0, Math.round(line.doubles));
+    line.triples = Math.max(0, Math.round(line.triples));
+    if(line.doubles+line.triples+line.hr > line.h){
+      line.doubles = Math.max(0, line.h-line.hr-line.triples);
+    }
+    var singles = Math.max(0, line.h-line.hr-line.doubles-line.triples);
+    line.bb = Math.max(0, Math.round(line.bb));
+    line.k = Math.max(0, Math.round(line.k));
+    line.tb = singles+line.doubles*2+line.triples*3+line.hr*4;
+    line.avg = line.h/(line.ab||1);
+    line.obp = clamp((line.h+line.bb)/((line.ab+line.bb)||1),0,1);
+    line.slg = clamp(line.tb/(line.ab||1),0,4);
+    line.ops = line.obp+line.slg;
+    line.runs = Math.max(0, Math.round(line.runs));
+    line.rbi = Math.max(0, Math.round(line.rbi));
+    line.sb = Math.max(0, Math.round(line.sb));
+    line.errors = Math.max(0, Math.round(line.errors||0));
+  }
+
+  // Small samples run hot or cold much harder than a full year does — a real 144-game
+  // season regresses toward a player's true talent, while a 50-game injury-shortened one
+  // can still be a fluke in either direction. Without this, an injury-hit half-season and
+  // a full healthy season swung exactly as wide, which is how a shortened season could
+  // randomly out-homer a full one. scale===1 at a full season, climbs as games drop.
+  function seasonVarianceScale(games){
+    return clamp(1 + (144-games)/144*1.3, 1, 2.4);
+  }
+
+  function simulateBatterSeason(player, injuryRiskBonus){
+    var s=player.stats, injury=null, missed=0;
+    var injuryChance=clamp(0.14+(injuryRiskBonus||0),0.03,0.65);
+    if(Math.random()<injuryChance){
+      missed=randInt(10,75);
+      injury = missed>45 ? '심각한 부상' : '경미한 부상';
+    }
+    // Playing time reflects how good the player currently is — a bench bat doesn't
+    // get 144 games just because the season has 144 of them.
+    var playShare=clamp(0.32+(overall(player)/99)*0.85,0.32,1.0);
+    var games=clamp(Math.round(144*playShare)-missed,15,144);
+    var ab=Math.round(games*rand(3.3,4.0));
+    var varScale=seasonVarianceScale(games);
+    // Average is mostly contact, with a smaller assist from speed (leg hits / infield
+    // singles) and mental (plate discipline in tough counts) — so it's never purely a
+    // contact-only number, but contact still dominates the read. The random swing widens
+    // for a small sample and narrows toward a full season, same idea as home runs below.
+    var avg=clamp(0.185+(s.contact/99)*0.165+(s.speed/99)*0.035+(s.mental/99)*0.025+rand(-0.022*varScale,0.030*varScale),0.140,0.420);
+    var h=Math.round(ab*avg);
+    // Home runs are power-driven but contact also matters — barreling the ball up requires
+    // making contact in the first place, so a high-power/low-contact slugger doesn't get
+    // full home-run value out of raw power alone. The per-season luck multiplier is tight
+    // at a full season (144 games) and widens the shorter the season runs.
+    var hrSpread=clamp(0.18*varScale,0.18,0.50);
+    var hrRate=Math.pow(s.power/99,1.3)*0.072*(0.86+0.14*(s.contact/99))*rand(1-hrSpread,1+hrSpread);
+    var hr=Math.round(ab*hrRate);
+    h=Math.max(h,hr);
+    var doubles=Math.round((h-hr)*0.19*rand(0.75,1.25));
+    var triples=Math.round(Math.max(0,h-hr-doubles)*0.03*rand(0.4,1.6));
+    var singles=Math.max(0,h-hr-doubles-triples);
+    // Mental (plate discipline) drives both more walks and fewer strikeouts.
+    var bb=Math.round(ab*(0.050+(s.mental/99)*0.060)*rand(0.8,1.2));
+    var k=Math.round(ab*(0.11+(1-s.contact/99)*0.20-(s.mental/99)*0.03)*rand(0.8,1.2));
+    k=Math.max(k, Math.round(ab*0.03));
+    var tb=singles+doubles*2+triples*3+hr*4;
+    var obp=clamp((h+bb)/((ab+bb)||1),0,1);
+    var slg=clamp(tb/(ab||1),0,4);
+    var ops=obp+slg;
+    // Runs scored: mostly getting on base and legs, with a touch of mental (reading the
+    // situation, taking the extra base). RBI: power to drive the ball in, plus mental for
+    // clutch at-bats.
+    var runs=Math.round(h*0.42+(s.speed/99)*20+(s.mental/99)*6+randInt(0,14));
+    var rbi=Math.round(hr*1.55+h*0.26+(s.power/99)*16+(s.mental/99)*10+randInt(0,14));
+    var sb=Math.round(((s.speed*0.9+s.mental*0.1)/99)*rand(0,38));
+    // Defensive errors: defense is the main driver, mental (composure) a smaller one.
+    // A DH never takes the field, so they're never charged an error.
+    var errors = player.isDH ? 0 : Math.max(0, Math.round(games*(0.16-(s.defense/99)*0.13-(s.mental/99)*0.02)*rand(0.5,1.5)));
+    var line = {
+      games:games, ab:ab, h:h, doubles:doubles, triples:triples, hr:hr, bb:bb, k:k, tb:tb,
+      avg:h/(ab||1), obp:obp, slg:slg, ops:ops, runs:runs, rbi:rbi, sb:sb, errors:errors, injury:injury
+    };
+    return line;
+  }
+
+  function simulatePitcherSeason(player, injuryRiskBonus){
+    var s=player.stats, injury=null, missedFactor=1;
+    var injuryChance=clamp(0.11+(injuryRiskBonus||0),0.02,0.60);
+    if(Math.random()<injuryChance){
+      missedFactor=rand(0.35,0.85);
+      injury = missedFactor<0.55 ? '심각한 부상' : '경미한 부상';
+    }
+    var isReliever = player.subrole==='불펜' || player.subrole==='마무리';
+    var ovr=overall(player);
+    // Same idea as the batter side — a struggling pitcher gets fewer starts/appearances,
+    // not the same workload as an ace.
+    var playShare=clamp(0.32+(ovr/99)*0.85,0.32,1.0);
+    var ip, gamesCount;
+    if(isReliever){
+      gamesCount=Math.round((40+(s.stamina/99)*32)*missedFactor*playShare);
+      ip=Math.round((gamesCount*(1.0+(s.stamina/99)*0.5))*10)/10;
+    } else {
+      gamesCount=Math.round((16+(s.stamina/99)*15)*missedFactor*playShare);
+      ip=Math.round((gamesCount*(4.2+(s.stamina/99)*2.4))*10)/10;
+    }
+    // Mental now shaves a bit off both ERA and walk rate (composure under pressure, fewer
+    // free passes in tight counts) — the raw-stuff coefficients are trimmed slightly so
+    // mental is a real contributor rather than a rounding error.
+    var era=clamp(6.4-(s.control/99)*3.0-(s.breaking/99)*1.4-(s.velocity/99)*0.8-(s.mental/99)*0.5+rand(-0.4,0.5),1.4,9.5);
+    var k9=clamp(4.0+(s.velocity/99)*7.2+(s.breaking/99)*3.8+rand(-0.7,0.7),3,15.5);
+    var bb9=clamp(5.6-(s.control/99)*4.0-(s.mental/99)*0.5+rand(-0.4,0.5),0.7,6.8);
+    var k=Math.round(ip/9*k9);
+    var bb=Math.round(ip/9*bb9);
+    var h=Math.max(0,Math.round(ip*(1.16-(s.control/99)*0.26-(s.velocity/99)*0.10)+rand(-3,3)));
+    var er=Math.round(era*ip/9);
+    var winPct=clamp(0.5+(ovr-50)/150+rand(-0.1,0.1),0.15,0.85);
+    // Role shapes the decision profile as much as skill does — a closer simply doesn't get
+    // the decisions (or the wins) a starter accumulates, no matter how sharp their stuff is.
+    var isCloser = player.subrole==='마무리';
+    var decisions, wins, losses, saves, holds;
+    if(player.subrole==='선발'){
+      decisions=Math.round(gamesCount*0.80);
+      wins=Math.round(decisions*winPct);
+      losses=Math.max(0,decisions-wins);
+      saves=0; holds=0;
+    } else if(isCloser){
+      decisions=Math.round(gamesCount*0.14);
+      wins=Math.min(9, Math.round(decisions*winPct*0.45)); // most closer decisions are blown-save losses, not wins
+      losses=Math.max(0,decisions-wins);
+      var saveRate=clamp(0.28+(ovr/99)*0.5,0.28,0.78);
+      saves=Math.round(gamesCount*saveRate);
+      holds=0; // holds are a setup-man stat — a closer's outings are save situations, not hold situations
+    } else {
+      // A setup reliever's headline number should be holds, not wins — a win is mostly the
+      // product of whichever inning the offense happens to take the lead in, not something
+      // this role should accumulate the way a starter does. Decisions/win-rate trimmed down
+      // (was 20% of games at 0.85x winPct — routinely out-earning saves+holds combined) and
+      // holds added as the real workhorse-reliever stat, scaling with quality like saves does
+      // for a closer.
+      decisions=Math.round(gamesCount*0.12);
+      wins=Math.round(decisions*winPct*0.5);
+      losses=Math.max(0,decisions-wins);
+      saves=Math.round(gamesCount*0.06); // occasional vulture saves in relief
+      var holdRate=clamp(0.18+(ovr/99)*0.45,0.18,0.65);
+      holds=Math.round(gamesCount*holdRate);
+    }
+    var whip=clamp((h+bb)/(ip||1),0.6,2.6);
+    return {
+      games:gamesCount, ip:ip, h:h, bb:bb, k:k, er:er, era:era,
+      wins:wins, losses:losses, saves:saves, holds:holds, whip:whip, injury:injury
+    };
+  }
+
+  // Same idea as recomputeBatterDerived — keep ERA/WHIP consistent with the raw earned-run
+  // and baserunner counts after any direct box-score adjustment.
+  function recomputePitcherDerived(line){
+    line.k = Math.max(0, Math.round(line.k));
+    line.bb = Math.max(0, Math.round(line.bb));
+    line.h = Math.max(0, Math.round(line.h));
+    line.er = Math.max(0, Math.round(line.er));
+    line.wins = Math.max(0, Math.round(line.wins));
+    line.losses = Math.max(0, Math.round(line.losses));
+    line.saves = Math.max(0, Math.round(line.saves));
+    line.holds = Math.max(0, Math.round(line.holds||0));
+    line.ip = Math.max(0, Math.round(line.ip*10)/10);
+    line.era = clamp((line.er*9)/(line.ip||1), 0, 15);
+    line.whip = clamp((line.h+line.bb)/(line.ip||1), 0.6, 2.6);
+  }
+
+  // Applies an event's direct season-output adjustment (a stolen-base gamble that actually
+  // pays off, a defensive shift that costs an error, etc) straight onto the simulated line,
+  // then recomputes every derived stat so the box score stays internally consistent.
+  function applyLineBoost(player, line, lineBoost){
+    if(!lineBoost) return;
+    Object.keys(lineBoost).forEach(function(key){
+      if(line[key]===undefined || !lineBoost[key]) return;
+      line[key] = line[key] + lineBoost[key];
+    });
+    if(player.position==='batter') recomputeBatterDerived(line);
+    else recomputePitcherDerived(line);
+  }
+
+  function seasonScoreBatter(line){ return line.ops*100+line.hr*1.2+line.rbi*0.3+line.avg*80; }
+  // Saves and holds now pull their weight here too — before this, a lights-out closer or
+  // setup man scored almost entirely off ERA/K despite their role's real value being in
+  // save/hold conversions, so growth, negotiation and MVP odds all quietly ignored the stat
+  // that actually defines a good reliever season.
+  function seasonScorePitcher(line){ return (5.5-line.era)*22+line.k*0.25+line.wins*2-line.losses*0.5+(line.saves||0)*0.6+(line.holds||0)*0.45; }
+
+  // Turns a stat line into a chance to win an award instead of a hard yes/no cutoff — right
+  // at the threshold sits at ~48% (a real toss-up), comfortably above climbs toward a ~94%
+  // ceiling (never a lock — the league can always have a stronger year than expected), and
+  // comfortably below still keeps a small (~1-2%) chance alive, because a .300 season can
+  // still win a weak-league batting title every once in a great while.
+  function awardChance(value, threshold, span, higherIsBetter){
+    var diff = higherIsBetter ? (value-threshold) : (threshold-value);
+    var z = diff/(span||1);
+    var chance = 1/(1+Math.exp(-1.6*z)) - 0.02;
+    return clamp(chance, 0.01, 0.94);
+  }
+  function rollAward(value, threshold, span, higherIsBetter){
+    return Math.random() < awardChance(value, threshold, span, higherIsBetter);
+  }
+
+  function determineAwards(player, line, isRookieYear){
+    var awards=[];
+    if(player.position==='batter'){
+      var scB=seasonScoreBatter(line);
+      // Thresholds below are calibrated against the batter avg/HR formula (see
+      // simulateBatterSeason) — when that formula moves, these need to move with it or
+      // award/legend rates drift out from under whatever they were tuned against.
+      if(line.ab>=350 && rollAward(line.avg, 0.365, 0.035, true)) awards.push('타격왕');
+      if(rollAward(line.hr, 38, 6, true)) awards.push('홈런왕');
+      if(rollAward(line.rbi, 114, 15, true)) awards.push('타점왕');
+      if(line.ab>=300 && rollAward(line.h, 170, 15, true)) awards.push('최다안타왕');
+      if((line.ab+line.bb)>=350 && rollAward(line.obp, 0.450, 0.035, true)) awards.push('출루율왕');
+      if(rollAward(line.runs, 95, 12, true)) awards.push('득점왕');
+      if(rollAward(line.sb, 35, 8, true)) awards.push('도루왕');
+      // MVP/GG were the one pair of rate-based awards with no plate-appearance floor, so a
+      // short (often injury-shortened) season — whose OPS swings much wider now thanks to
+      // seasonVarianceScale — was actually MORE likely to post an MVP-caliber OPS than a
+      // full healthy season. Gated on the same ab>=350 already used for 타격왕/출루율왕.
+      if(line.ab>=350 && rollAward(line.ops, 1.100, 0.06, true)) awards.push('정규시즌 MVP');
+      else if(line.ab>=350 && rollAward(line.ops, 0.990, 0.05, true)) awards.push('골든글러브');
+      if(isRookieYear && rollAward(scB, 151, 18, true)) awards.push('신인왕');
+    } else {
+      var scP=seasonScorePitcher(line);
+      var decisions=line.wins+line.losses;
+      // Same fix as the batter side, but the innings floor has to be role-aware: a full,
+      // healthy relief season only ever reaches ~80-90 IP, nowhere near a starter's ~150+,
+      // so one shared floor would make MVP/GG mathematically impossible for any reliever.
+      var mvpIpFloor = (player.subrole==='불펜' || player.subrole==='마무리') ? 45 : 110;
+      if(line.ip>=150 && rollAward(line.era, 2.70, 0.30, false)) awards.push('평균자책점왕');
+      if(rollAward(line.k, 190, 20, true)) awards.push('탈삼진왕');
+      if(rollAward(line.wins, 16, 3, true)) awards.push('다승왕');
+      if(rollAward(line.saves, 32, 5, true)) awards.push('구원왕');
+      if(rollAward(line.holds||0, 30, 6, true)) awards.push('홀드왕');
+      if(decisions>=10 && rollAward(line.wins/decisions, 0.640, 0.08, true)) awards.push('승률왕');
+      if(line.ip>=mvpIpFloor && rollAward(scP, 95, 16, true)) awards.push('정규시즌 MVP');
+      else if(line.ip>=mvpIpFloor && rollAward(scP, 75, 14, true)) awards.push('골든글러브');
+      if(isRookieYear && rollAward(scP, 70, 12, true)) awards.push('신인왕');
+    }
+    return awards;
+  }
+
+  function checkForcedRetirement(player){
+    var ovr=overall(player);
+    if(player.age>=41) return '나이';
+    if(ovr<48){
+      player.lowFormYears=(player.lowFormYears||0)+1;
+      if(player.age>=33 && player.lowFormYears>=2) return '방출';
+    } else {
+      player.lowFormYears=0;
+    }
+    return null;
+  }
+
+  // How good a season "should" look for a player of this talent level (OVR) — used so
+  // a mediocre year from a star reads as underperforming, not just "fine".
+  // Empirically refit against this session's actual formulas (avg/HR rebalance, the reliever
+  // holds rework, seasonScorePitcher's new saves/holds terms) — the old flat constants were
+  // never re-derived after those changes, so a merely AVERAGE season was reading as roughly
+  // +0.5-0.7 perf (out of a ±1 range) for batters and starters alike. That meant near-max
+  // growth rolls and near-ceiling salary raises were the default outcome every year instead
+  // of the reward for an actually good one. Role-specific because a starter's score leans on
+  // wins, while a reliever/closer's leans on saves/holds — one flat curve can't fit both.
+  function expectedSeasonScore(player){
+    var ovr=overall(player);
+    if(player.position==='batter') return 97+(ovr-30)*2.15;
+    if(player.subrole==='선발') return 25+(ovr-30)*2.70;
+    if(player.subrole==='마무리') return 28+(ovr-30)*2.15;
+    return 26+(ovr-30)*2.05; // 불펜 (and any other relief role)
+  }
+  function computePerf(player, seasonScoreVal){
+    var delta = seasonScoreVal - expectedSeasonScore(player);
+    return clamp(delta/50, -1, 1);
+  }
+  // A realistic per-season ceiling for what a player of this current quality (OVR) can
+  // actually command — climbs steeply from a fringe player's near-minimum salary toward a
+  // true superstar's, but stays finite. Without a ceiling tied to talent, a raise that's a
+  // percentage of last year's salary compounds forever — a merely good 20-year career could
+  // out-earn a real KBO legend many times over just from repeated small raises stacking up.
+  function salaryCeiling(player){
+    var ovr=overall(player);
+    var t=clamp((ovr-40)/55, 0, 1);
+    return Math.round(3000 + Math.pow(t, 1.6) * 280000);
+  }
+  // Shared clamp for every salary-setting path (base offer, negotiated raise, rival bidding
+  // war) — a small allowance (+8%) above the strict ceiling is left for negotiation wins /
+  // bidding wars so those still feel like a real result, without reopening the old unbounded
+  // compounding.
+  function capSalaryOffer(player, amount){
+    return clamp(Math.round(amount), 2700, Math.round(salaryCeiling(player)*1.08));
+  }
+  function teamOfferSalary(player, perf){
+    var raise=clamp(perf*0.35, -0.25, 0.45);
+    var ceiling=salaryCeiling(player);
+    // The raise itself tapers off the closer salary already sits to this player's realistic
+    // ceiling — still room to grow while there's real headroom, harder and harder to sustain
+    // once pay already reflects what a player of this quality is worth.
+    if(raise>0){
+      var headroom=clamp((ceiling-player.salary)/ceiling, 0, 1);
+      raise=raise*Math.pow(headroom, 1.4);
+    }
+    var raw=Math.round(player.salary*(1+raise));
+    return clamp(Math.max(2700, raw), 2700, ceiling);
+  }
+  function fanApprovalLabel(v){
+    if(v>=80) return '프랜차이즈 스타';
+    if(v>=60) return '탄탄한 인기';
+    if(v>=40) return '무난한 여론';
+    if(v>=20) return '커지는 불만';
+    return '거센 비판';
+  }
+  // Positive fan opinion has diminishing returns the higher it already sits (a star at 90
+  // approval barely moves the needle with one more good headline), while bad news always
+  // lands at full or extra force — fan opinion is easy to lose and hard to build.
+  function adjustFan(player, delta){
+    var cur=(player.fanApproval===undefined||player.fanApproval===null)?50:player.fanApproval;
+    if(delta>0){
+      var dampen=clamp(1-(cur-40)/90, 0.35, 1);
+      delta=delta*dampen;
+    } else if(delta<0){
+      delta=delta*1.15;
+    }
+    player.fanApproval = roundClamp(cur+delta, 0, 100);
+  }
+  function performTrade(player, reasonText, targetTeam){
+    var newTeam=targetTeam;
+    if(!newTeam){
+      var candidates=TEAMS.filter(function(t){ return !player.team || t.name!==player.team.name; });
+      newTeam=candidates[randInt(0,candidates.length-1)];
+    }
+    var oldName = player.team ? player.team.name : '무소속';
+    player.team=newTeam;
+    player.teamTenureYears=0;
+    player.tradeCount=(player.tradeCount||0)+1;
+    adjustFan(player, -6); // leaving a team always costs some goodwill with the fanbase you're leaving
+    player.highlights.push({year:player.careerYears, text:reasonText+' '+oldName+'에서 '+newTeam.name+'로 트레이드되었습니다.'});
+    return newTeam;
+  }
+
+  // Graded on average season quality across the whole career, not raw career-long totals —
+  // otherwise simply surviving to 41 in a long, mediocre career would read as "레전드".
+  // Batter and pitcher season-score formulas live on different scales, so each position is
+  // graded against its own baseline (roughly "a solid everyday player's season", ovr 75).
+  // More tiers than before, each gated on the sustained excellence its name implies.
+  function careerTitle(player){
+    var cs=player.careerScore||0, years=player.careerYears||0;
+    var avg = years>0 ? cs/years : 0;
+    // Batter baseline raised (160→172) to track the avg/HR formula's upward rebalance —
+    // otherwise the exact same career quality would drift into a higher title tier just
+    // because the underlying box-score numbers got bigger, not because the career itself did.
+    var baseline = player.position==='batter' ? 172 : 122.5;
+    var eliteSeasons = (player.awardsAll||[]).filter(function(a){
+      return a.name==='정규시즌 MVP' || a.name==='골든글러브';
+    }).length;
+    if(avg>=baseline*0.95 && years>=8 && eliteSeasons>=5){
+      return {title:'레전드', hof:(years>=10 && eliteSeasons>=7)};
+    }
+    if(avg>=baseline*0.80 && years>=6 && eliteSeasons>=2) return {title:'프랜차이즈 스타', hof:false};
+    if(avg>=baseline*0.65) return {title:'올스타급 주전', hof:false};
+    if(avg>=baseline*0.50) return {title:'베테랑 주전', hof:false};
+    if(avg>=baseline*0.35) return {title:'백업 자원', hof:false};
+    if(avg>=baseline*0.20) return {title:'저니맨', hof:false};
+    return {title:'짧았던 프로 생활', hof:false};
+  }
+
+  // Flavor tags summarizing how the player actually played — a mix of raw talent (stats
+  // at retirement), career-long production, and the story of the career itself (loyalty,
+  // durability, fan love). Capped so the ending screen doesn't turn into a wall of pills.
+  function deriveTraits(player, totals){
+    var traits=[], s=player.stats;
+    if(player.position==='batter'){
+      if(s.power>=80) traits.push('파워 히터');
+      if(s.contact>=80) traits.push('교타자');
+      if(s.speed>=80) traits.push('스피드스타');
+      if(s.defense>=80) traits.push('수비의 달인');
+      if(s.mental>=80) traits.push('강심장');
+      if(totals.avg>=0.320) traits.push('타격 기계');
+      if(totals.hr>=250) traits.push('거포');
+      if(totals.sb>=200) traits.push('도루왕 DNA');
+    } else {
+      if(s.velocity>=80) traits.push('강속구 투수');
+      if(s.control>=80) traits.push('제구의 달인');
+      if(s.breaking>=80) traits.push('변화구 마스터');
+      if(s.stamina>=80) traits.push('이닝 이터');
+      if(s.mental>=80) traits.push('강심장');
+      if(totals.era>0 && totals.era<=3.20) traits.push('철벽 방어율');
+      if(totals.saves>=200) traits.push('구원 전문가');
+      if((totals.holds||0)>=250) traits.push('필승조의 핵심');
+      if(totals.k>=1800) traits.push('탈삼진 머신');
+    }
+    var mvpSeasons=(player.awardsAll||[]).filter(function(a){ return a.name==='정규시즌 MVP'; }).length;
+    if(mvpSeasons>=3) traits.push('리그를 지배한 선수');
+    if((player.tradeCount||0)>=3) traits.push('저니맨 기질');
+    if((player.teamTenureYears||0)>=10) traits.push('원클럽맨');
+    if((player.severeInjuryCount||0)>=3) traits.push('부상과 싸운 커리어');
+    if((player.fanApproval||50)>=85) traits.push('팬들의 영원한 사랑');
+    if(traits.length===0) traits.push('묵묵히 제 몫을 한 선수');
+    return traits.slice(0,6);
+  }
+
+  /* ---------------- mid-season events ---------------- */
+  // Retuned so growth actually stops carrying a player past their prime: easiest in the
+  // early-to-mid 20s, flat through a true 27~30 peak, then already tapering through the back
+  // half of what's still nominally "prime" (31~33) so it doesn't keep dragging OVR upward
+  // past 33 — that tapering plus applyAgingDecline (which now starts at 31) is what makes the
+  // career actually crest inside 27~33 instead of the mid-30s.
+  function ageGrowthBonus(age){
+    if(age===undefined || age===null) return 0;
+    if(age<=23) return 0.15;
+    if(age<=26) return 0.08;
+    if(age<=30) return 0;
+    if(age<=33) return -0.10;
+    if(age<=36) return -0.22;
+    return -0.32;
+  }
+  // Growth gets harder to earn the closer a stat sits to its ceiling — no more free ride to 99.
+  // chanceBonus lets deliberate, season-long training (a chosen growth focus) succeed more
+  // reliably than a one-off event windfall, so picking a focus has a real, felt payoff.
+  function applyPermanentStatDelta(p, key, delta, chanceBonus){
+    if(delta>0){
+      var current=p.stats[key];
+      var successChance=clamp(1-(current-55)/70+(chanceBonus||0)+ageGrowthBonus(p.age), 0.12, 1);
+      if(Math.random()>=successChance) return; // growth attempt wasted — diminishing returns near the ceiling
+    }
+    p.stats[key]=roundClamp(p.stats[key]+delta, 10, 99);
+  }
+  function pickNonMentalStat(p){
+    var keys=statList(p.position).filter(function(s){ return s.key!=='mental'; }).map(function(s){ return s.key; });
+    return pick(keys);
+  }
+  function pickAnyStat(p){
+    var keys=statList(p.position).map(function(s){ return s.key; });
+    return pick(keys);
+  }
+
+  var EVENT_POOL = [
+    {
+      id:'private_training',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '코치가 개인 훈련을 제안합니다. 강도 높은 훈련은 이번 시즌 기량을 끌어올릴 수 있지만 부상 위험이 커집니다.'; },
+      choices:[
+        { label:'훈련을 받는다', resolve:function(p, ctx){
+            var keys=statList(p.position).filter(function(s){ return s.key!=='mental'; }).map(function(s){ return s.key; });
+            var key=pick(keys);
+            var boost=randInt(6,11);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+boost;
+            ctx.injuryRiskDelta += 0.10;
+            var label=statList(p.position).filter(function(s){ return s.key===key; })[0].label;
+            return '강도 높은 훈련으로 이번 시즌 '+label+' 능력이 일시적으로 상승했습니다. (부상 위험 증가)';
+          }},
+        { label:'무리하지 않는다', resolve:function(p, ctx){
+            return '무리하지 않고 컨디션 관리에 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'media_interview',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '언론에서 인터뷰를 요청합니다. 당당하게 포부를 밝힐까요, 겸손하게 답할까요?'; },
+      choices:[
+        { label:'자신감 있게 포부를 밝힌다', resolve:function(p, ctx){
+            adjustFan(p, 6);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-3;
+            return '당찬 인터뷰가 화제가 되어 팬들의 관심이 커졌습니다. 다만 스스로에게 거는 부담도 커졌습니다.';
+          }},
+        { label:'겸손하게 답한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+            return '겸손한 답변으로 부담 없이 시즌에 집중할 수 있게 되었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'clutch_moment',
+      condition:function(p){ return true; },
+      prompt:function(p){
+        return p.position==='pitcher'
+          ? '연장 접전, 감독이 불펜에서 긴급 등판을 요청합니다.'
+          : '끝내기 찬스, 감독이 대타 기용을 고민합니다.';
+      },
+      choices:[
+        { label:'기회를 잡는다', resolve:function(p, ctx){
+            var success = Math.random() < clamp(0.4+(overall(p)-50)/200, 0.25, 0.75);
+            if(success){
+              statList(p.position).forEach(function(s){ ctx.statBoost[s.key]=(ctx.statBoost[s.key]||0)+4; });
+              adjustFan(p, 12);
+              return '결정적 순간 완벽한 활약을 펼치며 팬들의 뜨거운 환호를 받았습니다!';
+            }
+            adjustFan(p, -6);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-4;
+            return '결정적 순간 아쉬운 결과가 나오며 팬들의 탄식이 나왔습니다.';
+          }},
+        { label:'무리하지 않는다', resolve:function(p, ctx){
+            return '무리하지 않고 다음 기회를 기다렸습니다.';
+          }}
+      ]
+    },
+    {
+      id:'team_conflict',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '라커룸에서 후배 선수와 마찰이 생겼습니다. 어떻게 대처할까요?'; },
+      choices:[
+        { label:'다독이며 리더십을 발휘한다', resolve:function(p, ctx){
+            if(Math.random()<0.75){
+              applyPermanentStatDelta(p,'mental',2);
+              adjustFan(p, 3);
+              return '성숙한 태도로 갈등을 풀어내며 리더십을 인정받았습니다. (멘탈 소폭 상승)';
+            }
+            adjustFan(p, -3);
+            return '나선 것이 오히려 오지랖으로 비쳐지며 분위기가 더 어색해졌습니다.';
+          }},
+        { label:'거리를 둔다', resolve:function(p, ctx){
+            if(Math.random()<0.35){
+              adjustFan(p, 1);
+              return '괜한 참견 없이 프로답게 넘어간 모습이 조용히 좋은 평가를 받았습니다.';
+            }
+            return '굳이 나서지 않고 거리를 두며 넘어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'injury_scare',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '경기 도중 통증을 느꼈습니다. 계속 뛸까요, 쉬어갈까요?'; },
+      choices:[
+        { label:'참고 계속 뛴다', resolve:function(p, ctx){
+            var keys=statList(p.position).map(function(s){ return s.key; });
+            var key=pick(keys);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+6;
+            ctx.injuryRiskDelta += 0.16;
+            return '아픔을 참고 경기에 나서 팀에 힘을 보탰지만 부상 위험이 커졌습니다.';
+          }},
+        { label:'휴식을 취한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.08;
+            adjustFan(p, -2);
+            return '무리하지 않고 휴식을 택해 건강을 지켰습니다.';
+          }}
+      ]
+    },
+    {
+      id:'dh_conversion',
+      condition:function(p){ return p.position==='batter' && !p.isDH && p.stats.defense<45 && p.age>=20; },
+      prompt:function(p){ return '수비 부담을 줄이기 위해 구단이 지명타자 전환을 제안합니다.'; },
+      choices:[
+        { label:'전환을 받아들인다', resolve:function(p, ctx){
+            p.isDH=true; p.subrole='지명타자';
+            return '지명타자로 전환해 타격에만 집중하기로 했습니다.';
+          }},
+        { label:'수비수로 남는다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.06;
+            adjustFan(p, 3);
+            return '수비수로 남아 궂은일을 도맡기로 했습니다. 팬들은 그 근성을 높이 평가했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'trade_rumor',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '트레이드 루머가 돌고 있습니다. 구단에 입장을 전할 기회가 주어집니다.'; },
+      choices:[
+        { label:'새 팀에서 재도약을 원한다고 밝힌다', resolve:function(p, ctx){
+            p.pendingTradeRequest=true;
+            adjustFan(p, -4);
+            return '이적 의사를 밝혔습니다. 시즌 후 새로운 팀을 찾게 될 수도 있습니다.';
+          }},
+        { label:'현재 팀에 남고 싶다고 밝힌다', resolve:function(p, ctx){
+            adjustFan(p, 4);
+            return '팀에 대한 애정을 밝히며 팬들의 신뢰를 얻었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'charity_event',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '팬 사인회 및 자선 행사 참석 요청이 왔습니다.'; },
+      choices:[
+        { label:'참석한다', resolve:function(p, ctx){
+            adjustFan(p, 6);
+            ctx.injuryRiskDelta += 0.03;
+            return '팬들과 소통하는 자리를 가지며 좋은 이미지를 쌓았지만 빡빡한 일정에 몸은 다소 지쳤습니다.';
+          }},
+        { label:'컨디션 관리를 위해 불참한다', resolve:function(p, ctx){
+            adjustFan(p, -3);
+            ctx.injuryRiskDelta -= 0.03;
+            return '컨디션 관리를 이유로 불참했습니다. 일부 팬들은 아쉬워했지만 몸은 확실히 챙겼습니다.';
+          }}
+      ]
+    },
+    {
+      id:'new_pitch',
+      condition:function(p){ return p.position==='pitcher'; },
+      prompt:function(p){ return '투수 코치가 새 변화구 장착을 제안합니다.'; },
+      choices:[
+        { label:'새 구종을 연마한다', resolve:function(p, ctx){
+            ctx.statBoost.breaking=(ctx.statBoost.breaking||0)+randInt(6,10);
+            ctx.injuryRiskDelta += 0.05;
+            return '새 변화구를 다듬으며 무기를 하나 더 갖췄습니다.';
+          }},
+        { label:'기존 레퍼토리를 유지한다', resolve:function(p, ctx){
+            return '기존에 하던 대로 안정적인 루틴을 이어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'stance_tweak',
+      condition:function(p){ return p.position==='batter'; },
+      prompt:function(p){ return '타격 코치가 타격 폼 교정을 제안합니다.'; },
+      choices:[
+        { label:'교정을 받아들인다', resolve:function(p, ctx){
+            ctx.statBoost.contact=(ctx.statBoost.contact||0)+randInt(6,10);
+            ctx.statBoost.power=(ctx.statBoost.power||0)-3;
+            return '타격 폼을 교정해 정확도가 좋아졌지만 적응 기간 동안 힘은 다소 줄었습니다.';
+          }},
+        { label:'기존 폼을 고수한다', resolve:function(p, ctx){
+            return '익숙한 폼을 그대로 유지하기로 했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'endorsement_offer',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '개인 용품 브랜드에서 스폰서십 제안이 들어왔습니다.'; },
+      choices:[
+        { label:'계약한다', resolve:function(p, ctx){
+            adjustFan(p, 4);
+            if(Math.random()<0.3){
+              ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+              return '브랜드 광고 모델 계약을 맺으며 인지도가 올라갔지만 화보·행사 일정에 신경이 분산됐습니다.';
+            }
+            return '브랜드 광고 모델 계약을 맺으며 인지도가 올라갔습니다.';
+          }},
+        { label:'거절한다', resolve:function(p, ctx){
+            if(Math.random()<0.3){
+              ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+              return '야구에만 집중하기 위해 제안을 정중히 거절했고, 그만큼 훈련에 온전히 몰입할 수 있었습니다.';
+            }
+            return '야구에만 집중하기 위해 제안을 정중히 거절했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'mentor_rookie',
+      condition:function(p){ return p.age>=28; },
+      prompt:function(p){ return '어린 후배 선수가 진지하게 조언을 구합니다.'; },
+      choices:[
+        { label:'적극적으로 멘토링한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',2);
+            adjustFan(p, 4);
+            ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)-2;
+            return '후배를 살뜰히 챙기며 리더로서의 면모를 보였지만, 그만큼 자신의 훈련 시간은 줄었습니다. (멘탈 소폭 상승)';
+          }},
+        { label:'각자의 야구에 집중하자고 답한다', resolve:function(p, ctx){
+            ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)+2;
+            return '거리를 두되 냉정하게 조언만 짧게 건네고, 남은 시간은 온전히 자신의 훈련에 썼습니다.';
+          }}
+      ]
+    },
+    {
+      id:'rookie_bonding',
+      condition:function(p){ return p.careerYears===1; },
+      prompt:function(p){ return '선배들이 신고식 겸 회식 자리를 마련했습니다.'; },
+      choices:[
+        { label:'참석해 팀에 녹아든다', resolve:function(p, ctx){
+            adjustFan(p, 3);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+            ctx.injuryRiskDelta += 0.03;
+            return '선배들과 어울리며 빠르게 팀에 적응했지만, 컨디션 관리에는 다소 소홀해졌습니다.';
+          }},
+        { label:'컨디션 관리를 이유로 일찍 자리를 뜬다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.03;
+            if(Math.random()<0.3){
+              adjustFan(p, -2);
+              return '몸 관리를 우선하며 일찍 숙소로 돌아갔지만, 일부 선배들에게 서운함을 샀습니다.';
+            }
+            return '몸 관리를 우선하며 일찍 숙소로 돌아갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'contract_year_pressure',
+      condition:function(p){ return p.careerYears>=3; },
+      prompt:function(p){ return 'FA(자유계약)를 앞두고 몸값에 대한 부담이 커집니다.'; },
+      choices:[
+        { label:'부담을 원동력으로 삼는다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+5;
+            ctx.injuryRiskDelta += 0.05;
+            return '몸값 부담을 오히려 동기로 삼아 시즌 내내 힘을 냈습니다.';
+          }},
+        { label:'평소처럼 편안하게 임한다', resolve:function(p, ctx){
+            return '몸값 이야기에 흔들리지 않고 평소 페이스를 유지했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'rival_series',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '숙명의 라이벌전을 앞두고 구장 분위기가 뜨겁게 달아올랐습니다.'; },
+      choices:[
+        { label:'각오를 다지고 임한다', resolve:function(p, ctx){
+            var success=Math.random()<clamp(0.4+(overall(p)-50)/200,0.25,0.75);
+            if(success){
+              ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+5;
+              adjustFan(p, 7);
+              return '라이벌전에서 강렬한 인상을 남기며 팬들을 열광시켰습니다.';
+            }
+            adjustFan(p, -4);
+            return '라이벌전 부담감에 눌려 아쉬운 경기를 펼쳤습니다.';
+          }},
+        { label:'여느 경기처럼 담담하게 임한다', resolve:function(p, ctx){
+            return '특별한 경기로 여기지 않고 평소처럼 준비했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'heatwave',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '기록적인 폭염 속에 살인적인 일정이 이어지고 있습니다.'; },
+      choices:[
+        { label:'강행군을 이어간다', resolve:function(p, ctx){
+            ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+4;
+            ctx.injuryRiskDelta += 0.08;
+            return '더위에도 아랑곳하지 않고 경기에 나서 팀에 힘을 보탰습니다.';
+          }},
+        { label:'체력 안배를 우선한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.06;
+            return '무리하지 않고 체력을 안배하며 여름을 버텼습니다.';
+          }}
+      ]
+    },
+    {
+      id:'coach_change',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '새로 부임한 코치가 새로운 스타일을 요구합니다.'; },
+      choices:[
+        { label:'새로운 스타일에 적응한다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            if(Math.random()<0.7){
+              ctx.statBoost[key]=(ctx.statBoost[key]||0)+6;
+              return '새 코치의 지도를 적극적으로 받아들여 좋은 변화를 만들었습니다.';
+            }
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)-3;
+            return '새로운 스타일에 적응하는 과정에서 오히려 밸런스가 흐트러졌습니다.';
+          }},
+        { label:'기존 스타일을 고수한다', resolve:function(p, ctx){
+            if(Math.random()<0.3){
+              ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)+3;
+              return '흔들림 없이 자신만의 스타일을 지킨 점이 오히려 좋은 결과로 이어졌습니다.';
+            }
+            return '자신만의 스타일을 믿고 그대로 밀고 나갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'social_media_buzz',
+      condition:function(p){ return true; },
+      prompt:function(p){ return 'SNS에서 예상치 못하게 화제의 중심에 섰습니다.'; },
+      choices:[
+        { label:'적극적으로 팬들과 소통한다', resolve:function(p, ctx){
+            adjustFan(p, 7);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            return '화제성을 즐기며 팬들과 활발히 소통했지만 다소 산만해지기도 했습니다.';
+          }},
+        { label:'조용히 넘어간다', resolve:function(p, ctx){
+            return '화제를 신경 쓰지 않고 조용히 시즌에만 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'iron_man_streak',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '연속 경기 출장(또는 등판) 개인 기록에 도전할 기회가 왔습니다.'; },
+      choices:[
+        { label:'기록에 도전한다', resolve:function(p, ctx){
+            ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+4;
+            ctx.injuryRiskDelta += 0.10;
+            return '몸을 아끼지 않고 기록에 도전하며 투혼을 보여줬습니다.';
+          }},
+        { label:'무리하지 않고 쉬어간다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.05;
+            return '기록보다 장기적인 커리어를 생각해 휴식을 택했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'milestone_chase',
+      condition:function(p){ return p.careerYears>=5; },
+      prompt:function(p){ return '개인 통산 기록 마일스톤이 눈앞에 다가왔습니다.'; },
+      choices:[
+        { label:'기록 달성에 집중한다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+3;
+            adjustFan(p, 6);
+            return '마일스톤을 의식하며 시즌 내내 화제를 모았습니다.';
+          }},
+        { label:'팀 성적을 우선한다', resolve:function(p, ctx){
+            adjustFan(p, 3);
+            return '개인 기록보다 팀의 승리를 우선하는 모습으로 신뢰를 얻었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'national_team_call',
+      condition:function(p){ return p.age>=20 && p.age<=34 && p.careerYears>=1; },
+      prompt:function(p){ return '국제대회 국가대표 차출 제안이 왔습니다.'; },
+      choices:[
+        { label:'태극마크를 달고 참가한다', resolve:function(p, ctx){
+            adjustFan(p, 14);
+            ctx.injuryRiskDelta += 0.08;
+            applyPermanentStatDelta(p,'mental',2);
+            return '국가대표로 발탁되어 값진 경험을 쌓고 팬들의 큰 자부심이 되었습니다.';
+          }},
+        { label:'소속팀 시즌에 집중하겠다고 답한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            return '소속팀을 우선하겠다는 뜻을 밝혔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'equipment_change',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '새로운 장비(배트, 글러브 등) 후원 제안이 들어왔습니다.'; },
+      choices:[
+        { label:'새 장비로 바꿔본다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            if(Math.random()<0.65){
+              ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(4,7);
+              return '새 장비에 적응하며 미묘한 감각의 변화를 느꼈습니다.';
+            }
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)-3;
+            return '새 장비가 손에 익지 않아 한동안 감각에 혼선을 겪었습니다.';
+          }},
+        { label:'써오던 장비를 고수한다', resolve:function(p, ctx){
+            if(Math.random()<0.3){
+              ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+              return '손에 익은 장비를 그대로 사용하며 오히려 안정감 있게 시즌에 임했습니다.';
+            }
+            return '손에 익은 장비를 그대로 사용하기로 했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'sacrifice_philosophy',
+      condition:function(p){ return p.position==='batter' && !p.isDH; },
+      prompt:function(p){ return '감독이 희생번트 등 팀 배팅을 자주 지시합니다.'; },
+      choices:[
+        { label:'팀 배팅을 충실히 따른다', resolve:function(p, ctx){
+            adjustFan(p, 4);
+            ctx.statBoost.power=(ctx.statBoost.power||0)-2;
+            return '팀을 위한 궂은일을 마다하지 않아 동료들의 신뢰를 얻었습니다.';
+          }},
+        { label:'타격에 집중하고 싶다는 의견을 낸다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+2;
+            return '솔직한 의견을 전하고 자신의 타격에 더 집중하기로 했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'documentary_feature',
+      condition:function(p){ return (p.fanApproval||50)>=60; },
+      prompt:function(p){ return '방송사에서 밀착 다큐멘터리 출연을 제안합니다.'; },
+      choices:[
+        { label:'출연한다', resolve:function(p, ctx){
+            adjustFan(p, 8);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            return '다큐멘터리 출연으로 인지도가 크게 올랐지만 카메라가 다소 신경 쓰였습니다.';
+          }},
+        { label:'정중히 거절한다', resolve:function(p, ctx){
+            return '사생활 노출을 원치 않아 제안을 거절했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'benches_clearing',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '몸에 맞는 공을 두고 양 팀 벤치가 그라운드로 몰려나오는 상황이 벌어졌습니다.'; },
+      choices:[
+        { label:'분위기를 진정시키는 데 앞장선다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',2);
+            adjustFan(p, 4);
+            ctx.injuryRiskDelta += 0.05;
+            return '흥분한 양 팀 선수들 사이에서 침착하게 상황을 진정시켰지만, 몸싸움에 휘말릴 위험을 감수해야 했습니다.';
+          }},
+        { label:'동료들 뒤에서 상황을 지켜본다', resolve:function(p, ctx){
+            if(Math.random()<0.3){
+              adjustFan(p, -2);
+              return '몸을 사린다는 인상을 남기며 일부 팬들의 눈총을 샀습니다.';
+            }
+            return '큰 다툼 없이 상황이 정리될 때까지 지켜보기만 했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'winter_camp',
+      condition:function(p){ return p.careerYears>=1; },
+      prompt:function(p){ return '해외 개인 훈련 캠프 참가 제안이 왔습니다.'; },
+      choices:[
+        { label:'참가한다', resolve:function(p, ctx){
+            ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)+randInt(6,9);
+            ctx.injuryRiskDelta += 0.04;
+            return '해외 캠프에서 새로운 훈련법을 익히며 몸을 만들었습니다.';
+          }},
+        { label:'국내에서 준비한다', resolve:function(p, ctx){
+            return '익숙한 환경인 국내에서 차분히 몸을 만들었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'podcast_guest',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '유튜브 채널과 팟캐스트에서 출연 요청이 왔습니다.'; },
+      choices:[
+        { label:'출연해 입담을 뽐낸다', resolve:function(p, ctx){
+            if(Math.random()<0.75){
+              adjustFan(p, 5);
+              return '편안한 입담으로 새로운 팬층을 끌어모았습니다.';
+            }
+            adjustFan(p, -2);
+            return '무심코 던진 말이 논란이 되며 곤욕을 치렀습니다.';
+          }},
+        { label:'짧은 인터뷰로 응한다', resolve:function(p, ctx){
+            adjustFan(p, 1);
+            return '짧게 근황만 전하고 시즌 준비에 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'youth_clinic',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '유소년 야구 교실 재능기부 요청이 들어왔습니다.'; },
+      choices:[
+        { label:'참여한다', resolve:function(p, ctx){
+            adjustFan(p, 6);
+            ctx.injuryRiskDelta += 0.02;
+            return '어린 선수들을 직접 가르치며 좋은 본보기가 되었지만, 그만큼 휴식일 하루를 내줘야 했습니다.';
+          }},
+        { label:'일정상 참여하지 못한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.02;
+            return '빡빡한 일정으로 아쉽게 참여하지 못했지만, 그 시간을 몸 회복에 쓸 수 있었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'walk_up_song',
+      condition:function(p){ return p.careerYears<=2; },
+      prompt:function(p){ return '나만의 등장곡(워크업송)을 새로 정할 기회가 왔습니다.'; },
+      choices:[
+        { label:'개성 있는 곡을 고른다', resolve:function(p, ctx){
+            if(Math.random()<0.7){
+              adjustFan(p, 4);
+              return '독특한 등장곡이 화제가 되며 팬들 사이에서 입소문을 탔습니다.';
+            }
+            adjustFan(p, -2);
+            return '너무 튀려 한다는 반응이 나오며 오히려 어색한 화제만 남겼습니다.';
+          }},
+        { label:'무난한 곡을 고른다', resolve:function(p, ctx){
+            adjustFan(p, 1);
+            return '무난하지만 안정적인 선곡으로 넘어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'analytics_report',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '데이터 분석팀이 약점을 짚어주며 맞춤 훈련을 제안합니다.'; },
+      choices:[
+        { label:'데이터 기반 훈련을 받는다', resolve:function(p, ctx){
+            ctx.statBoost[pickNonMentalStat(p)]=(ctx.statBoost[pickNonMentalStat(p)]||0)+6;
+            ctx.injuryRiskDelta += 0.03;
+            return '데이터로 짚어준 약점을 집중적으로 보완했습니다.';
+          }},
+        { label:'기존의 감각을 믿는다', resolve:function(p, ctx){
+            return '숫자보다 스스로의 감각을 믿고 시즌을 준비했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'captain_vote',
+      condition:function(p){ return p.careerYears>=4; },
+      prompt:function(p){ return '선수단 주장 후보로 이름이 거론되고 있습니다.'; },
+      choices:[
+        { label:'주장을 맡는다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',3);
+            adjustFan(p, 7);
+            ctx.injuryRiskDelta += 0.03;
+            return '팀의 중심을 잡는 주장 역할을 받아들이며 리더십을 인정받았습니다.';
+          }},
+        { label:'정중히 고사한다', resolve:function(p, ctx){
+            return '아직은 이르다고 생각해 주장 역할을 고사했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'rain_delay',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '잦은 우천 순연으로 경기 일정이 밀려 있습니다.'; },
+      choices:[
+        { label:'틈틈이 개인 훈련을 이어간다', resolve:function(p, ctx){
+            ctx.statBoost[pickAnyStat(p)]=(ctx.statBoost[pickAnyStat(p)]||0)+4;
+            return '틈나는 대로 몸을 만들며 리듬을 잃지 않았습니다.';
+          }},
+        { label:'충분히 휴식한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.05;
+            return '갑작스레 생긴 휴식기를 몸 회복에 활용했습니다.';
+          }}
+      ]
+    },
+
+    /* ---- situational, in-game baseball decisions: these apply straight to the season's
+       box-score numbers via ctx.lineBoost, instead of nudging input stats ---- */
+    {
+      id:'stolen_base_attempt',
+      condition:function(p){ return p.position==='batter' && p.stats.speed>=40; },
+      prompt:function(p){ return '감독이 도루 시도를 더 늘릴지, 무리하지 않을지 시즌 내내 결정을 맡깁니다.'; },
+      choices:[
+        { label:'적극적으로 도루를 시도한다', resolve:function(p, ctx){
+            var chance=clamp(0.35+(p.stats.speed-50)/150, 0.2, 0.8);
+            ctx.lineBoost.sb=(ctx.lineBoost.sb||0);
+            if(Math.random()<chance){
+              ctx.lineBoost.sb += randInt(5,10);
+              return '적극적인 도루 시도가 성과를 내며 도루 개수가 크게 늘었습니다.';
+            }
+            ctx.lineBoost.sb += randInt(1,3);
+            ctx.lineBoost.runs=(ctx.lineBoost.runs||0)-randInt(2,5);
+            return '도루를 시도했지만 자주 아웃되며 오히려 득점 기회를 여러 번 날렸습니다.';
+          }},
+        { label:'안전하게 주루를 자제한다', resolve:function(p, ctx){
+            ctx.lineBoost.sb=(ctx.lineBoost.sb||0)-randInt(2,5);
+            return '무리한 주루 대신 안전한 야구를 택했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'hit_and_run',
+      condition:function(p){ return p.position==='batter' && p.stats.contact>=40; },
+      prompt:function(p){ return '주자가 나갈 때마다 히트앤런 작전을 자주 걸지 여부를 정합니다.'; },
+      choices:[
+        { label:'적극적으로 히트앤런을 건다', resolve:function(p, ctx){
+            var chance=clamp(0.35+(p.stats.contact-50)/150, 0.2, 0.75);
+            if(Math.random()<chance){
+              ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(3,7);
+              ctx.lineBoost.rbi=(ctx.lineBoost.rbi||0)+randInt(2,5);
+              return '작전이 여러 차례 성공하며 안타와 타점이 늘었습니다.';
+            }
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)+randInt(3,6);
+            return '무리한 작전 수행 과정에서 삼진이 늘었습니다.';
+          }},
+        { label:'정석 야구를 유지한다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+1;
+            return '무리한 작전 없이 정석대로 타석에 섰습니다.';
+          }}
+      ]
+    },
+    {
+      id:'risky_double_play',
+      condition:function(p){ return p.position==='batter' && !p.isDH; },
+      prompt:function(p){ return '수비 상황에서 무리해서 병살을 노릴지, 안전하게 아웃 하나만 잡을지 잦은 판단이 필요합니다.'; },
+      choices:[
+        { label:'위험을 감수하고 병살을 적극적으로 노린다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.defense-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.errors=(ctx.lineBoost.errors||0)-randInt(1,3);
+              adjustFan(p, 4);
+              return '과감한 병살 시도가 성공하며 수비에서 팀에 크게 기여했습니다.';
+            }
+            ctx.lineBoost.errors=(ctx.lineBoost.errors||0)+randInt(2,5);
+            return '무리하게 병살을 노리다 실책이 늘었습니다.';
+          }},
+        { label:'안전하게 아웃 하나만 확실히 잡는다', resolve:function(p, ctx){
+            ctx.lineBoost.errors=(ctx.lineBoost.errors||0)-randInt(1,2);
+            return '무리하지 않고 확실한 아웃 하나에 집중해 안정적인 수비를 펼쳤습니다.';
+          }}
+      ]
+    },
+    {
+      id:'two_strike_approach',
+      condition:function(p){ return p.position==='batter'; },
+      prompt:function(p){ return '투 스트라이크 이후 접근법을 컨택 위주로 바꿀지, 파워 스윙을 유지할지 정합니다.'; },
+      choices:[
+        { label:'컨택 위주로 전환한다', resolve:function(p, ctx){
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)-randInt(8,15);
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(3,6);
+            ctx.lineBoost.hr=(ctx.lineBoost.hr||0)-randInt(1,3);
+            return '투 스트라이크 이후 컨택에 집중해 삼진은 줄고 안타는 늘었지만 장타력은 다소 줄었습니다.';
+          }},
+        { label:'파워 스윙을 유지한다', resolve:function(p, ctx){
+            ctx.lineBoost.hr=(ctx.lineBoost.hr||0)+randInt(1,3);
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)+randInt(5,10);
+            return '위기에서도 큰 스윙을 유지해 홈런은 늘었지만 삼진도 함께 늘었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'extra_base_gamble',
+      condition:function(p){ return p.position==='batter' && p.stats.speed>=40; },
+      prompt:function(p){ return '2루타성 타구에서 3루까지 무리해서 노릴지 결정하는 상황이 잦게 찾아옵니다.'; },
+      choices:[
+        { label:'적극적으로 3루까지 노린다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.speed-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.triples=(ctx.lineBoost.triples||0)+randInt(1,3);
+              ctx.lineBoost.runs=(ctx.lineBoost.runs||0)+randInt(3,6);
+              return '과감한 주루로 3루타가 늘고 득점 기회도 늘었습니다.';
+            }
+            ctx.lineBoost.rbi=(ctx.lineBoost.rbi||0)-randInt(1,3);
+            ctx.lineBoost.runs=(ctx.lineBoost.runs||0)-randInt(1,3);
+            return '무리한 주루 시도가 여러 번 아웃으로 끝나며 득점 기회를 놓쳤습니다.';
+          }},
+        { label:'안전하게 2루에서 멈춘다', resolve:function(p, ctx){
+            return '무리하지 않고 안전하게 주루 플레이를 이어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'infield_shift_gamble',
+      condition:function(p){ return p.position==='batter' && !p.isDH; },
+      prompt:function(p){ return '상대 타자 성향에 맞춰 극단적인 수비 시프트를 걸지 여부를 결정합니다.'; },
+      choices:[
+        { label:'과감한 시프트를 건다', resolve:function(p, ctx){
+            var chance=clamp(0.4+((p.stats.defense+p.stats.mental)/2-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.errors=(ctx.lineBoost.errors||0)-randInt(1,3);
+              adjustFan(p, 3);
+              return '적중한 수비 시프트로 실책이 줄고 팬들의 호평을 받았습니다.';
+            }
+            ctx.lineBoost.errors=(ctx.lineBoost.errors||0)+randInt(2,4);
+            return '어긋난 시프트로 수비에서 여러 번 곤욕을 치렀습니다.';
+          }},
+        { label:'기본 수비 위치를 지킨다', resolve:function(p, ctx){
+            return '무난하게 기본 수비 위치를 지켰습니다.';
+          }}
+      ]
+    },
+    {
+      id:'brushback_response',
+      condition:function(p){ return p.position==='pitcher'; },
+      prompt:function(p){ return '상대 타자를 상대로 몸쪽 승부를 적극적으로 가져갈지 결정합니다.'; },
+      choices:[
+        { label:'적극적으로 몸쪽 승부한다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.control-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.k=(ctx.lineBoost.k||0)+randInt(6,12);
+              return '과감한 몸쪽 승부가 통하며 탈삼진이 크게 늘었습니다.';
+            }
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(6,12);
+            adjustFan(p, -3);
+            return '제구가 흔들리며 볼넷이 늘고 위협구 시비로 팬들의 눈총을 받았습니다.';
+          }},
+        { label:'안전하게 바깥쪽 위주로 승부한다', resolve:function(p, ctx){
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)-randInt(2,5);
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)-randInt(2,4);
+            return '무리하지 않고 바깥쪽 위주로 안정적인 승부를 이어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'pitch_around_slugger',
+      condition:function(p){ return p.position==='pitcher'; },
+      prompt:function(p){ return '상대 팀 핵심 타자를 정면 승부할지, 신중하게 피해갈지 결정합니다.'; },
+      choices:[
+        { label:'신중하게 피해간다', resolve:function(p, ctx){
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(5,9);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)-randInt(1,4);
+            adjustFan(p, -2);
+            return '위험을 피해가며 실점은 줄었지만 소극적인 투구에 일부 팬들은 아쉬워했습니다.';
+          }},
+        { label:'정면 승부한다', resolve:function(p, ctx){
+            var chance=clamp(0.4+((p.stats.velocity+p.stats.breaking)/2-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.k=(ctx.lineBoost.k||0)+randInt(4,8);
+              adjustFan(p, 3);
+              return '과감한 정면 승부가 성공하며 팬들의 환호를 받았습니다.';
+            }
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(2,5);
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(2,4);
+            return '정면 승부가 실패하며 장타를 여러 차례 허용했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'complete_game_push',
+      condition:function(p){ return p.position==='pitcher' && p.subrole==='선발'; },
+      prompt:function(p){ return '완투를 노리고 이닝을 더 끌고 갈지, 일찍 불펜에 넘길지 감독이 묻습니다.'; },
+      choices:[
+        { label:'완투를 이어간다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.08;
+            ctx.lineBoost.ip=(ctx.lineBoost.ip||0)+rand(8,18);
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)+randInt(4,9);
+            adjustFan(p, 5);
+            return '이닝을 아끼지 않고 던지며 완투에 도전, 팬들의 큰 박수를 받았습니다.';
+          }},
+        { label:'일찍 불펜에 넘긴다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.05;
+            ctx.lineBoost.ip=(ctx.lineBoost.ip||0)-rand(4,10);
+            return '몸을 아끼며 일찍 불펜에 이닝을 넘겼습니다.';
+          }}
+      ]
+    },
+    {
+      id:'mound_visit_composure',
+      condition:function(p){ return p.position==='pitcher'; },
+      prompt:function(p){ return '위기 상황마다 잦아지는 코치의 마운드 방문에 어떻게 반응할지 결정합니다.'; },
+      choices:[
+        { label:'코치의 조언을 적극 받아들인다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',2);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)-randInt(1,3);
+            return '코치의 조언을 받아들여 위기 때마다 안정을 찾았습니다. (멘탈 소폭 상승)';
+          }},
+        { label:'스스로 판단해 이겨내겠다고 한다', resolve:function(p, ctx){
+            var chance=clamp(0.4+(p.stats.mental-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.er=(ctx.lineBoost.er||0)-randInt(2,5);
+              adjustFan(p, 4);
+              return '스스로 위기를 이겨내며 강한 인상을 남겼습니다.';
+            }
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(3,6);
+            return '혼자 해결하려다 위기를 넘기지 못하고 실점이 늘었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'save_situation_approach',
+      condition:function(p){ return p.position==='pitcher' && p.subrole==='마무리'; },
+      prompt:function(p){ return '세이브 상황에서 정면 승부 위주로 갈지, 철저히 약점만 공략하며 갈지 결정합니다.'; },
+      choices:[
+        { label:'정면 승부로 화끈하게 막는다', resolve:function(p, ctx){
+            var chance=clamp(0.4+((p.stats.velocity+p.stats.breaking)/2-50)/150, 0.25, 0.8);
+            if(Math.random()<chance){
+              ctx.lineBoost.saves=(ctx.lineBoost.saves||0)+randInt(2,5);
+              adjustFan(p, 6);
+              return '화끈한 정면 승부로 세이브를 여러 차례 추가하며 마무리 본색을 보였습니다.';
+            }
+            ctx.lineBoost.saves=(ctx.lineBoost.saves||0)-randInt(1,3);
+            ctx.lineBoost.losses=(ctx.lineBoost.losses||0)+1;
+            adjustFan(p, -5);
+            return '정면 승부가 실패하며 블론 세이브로 이어졌습니다.';
+          }},
+        { label:'안전하게 약점만 공략한다', resolve:function(p, ctx){
+            ctx.lineBoost.saves=(ctx.lineBoost.saves||0)+randInt(1,3);
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(3,6);
+            return '약점만 집요하게 공략하며 안전하게 세이브를 쌓았습니다.';
+          }}
+      ]
+    }
+  ];
+
+  function pickSeasonEvents(p){
+    var eligible = EVENT_POOL.filter(function(e){ return !e.condition || e.condition(p); });
+    eligible = eligible.slice().sort(function(){ return Math.random()-0.5; });
+    var minCount = Math.min(2, eligible.length);
+    var maxCount = Math.min(3, eligible.length);
+    var count = randInt(minCount, maxCount);
+    return eligible.slice(0, count);
+  }
+
+  /* ---------------- state ---------------- */
+  var SAVE_KEY = 'nine_innings_save_v1';
+  var ARCHIVE_KEY = 'nine_innings_archive_v1';
+  var state = {
+    screen:'title',
+    player:null,
+    create:{ name:'', position:null, subrole:null, stats:null, remaining:ALLOC_BUDGET },
+    hsResult:null,
+    draftResult:null,
+    hubTab:'player',
+    forcedRetireReason:null,
+    seasonFlow:null
+  };
+
+  function saveGame(){
+    try{
+      // Only persist once the player has actually turned pro (or retired) —
+      // saving mid character-creation/draft would make "이어하기" jump to a broken hub.
+      if(state.player && state.player.careerYears>=1){
+        localStorage.setItem(SAVE_KEY, JSON.stringify({screen:state.screen, player:state.player}));
+      }
+    }catch(e){ /* storage unavailable — ignore */ }
+  }
+  function loadSave(){
+    try{
+      var raw=localStorage.getItem(SAVE_KEY);
+      if(!raw) return null;
+      return JSON.parse(raw);
+    }catch(e){ return null; }
+  }
+  function clearSave(){
+    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  }
+
+  function loadArchive(){
+    try{
+      var raw=localStorage.getItem(ARCHIVE_KEY);
+      if(!raw) return [];
+      var arr=JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function archivePlayer(p){
+    try{
+      var totals = aggregateCareer(p);
+      var ct = careerTitle(p);
+      var rec = {
+        name: p.name,
+        position: p.position,
+        subrole: p.subrole,
+        isDH: !!p.isDH,
+        years: p.careerYears,
+        finalAge: p.age,
+        finalTeam: p.team ? p.team.name : '',
+        title: ct.title,
+        hof: !!ct.hof,
+        fanApproval: p.fanApproval,
+        traits: deriveTraits(p, totals),
+        totalEarnings: p.totalEarnings||0,
+        awards: (p.awardsAll||[]).map(function(a){ return a.year+'년 '+a.name; }),
+        retiredReason: state.forcedRetireReason || '자진 은퇴',
+        totals: p.position==='batter'
+          ? { games: totals.games, avg: totals.avg, h: totals.h, hr: totals.hr, rbi: totals.rbi, sb: totals.sb, errors: totals.errors }
+          : { games: totals.games, era: totals.era, wins: totals.wins, losses: totals.losses, saves: totals.saves, k: totals.k },
+        archivedAt: Date.now()
+      };
+      var list = loadArchive();
+      list.unshift(rec);
+      if(list.length>200) list.length=200;
+      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list));
+    }catch(e){ /* storage unavailable — ignore */ }
+  }
+
+  /* ---------------- rendering ---------------- */
+  function showScreen(id){
+    $$('.screen').forEach(function(el){ el.classList.add('hidden'); });
+    $('#'+id).classList.remove('hidden');
+  }
+
+  function updateScoreboardBar(){
+    var box=$('#sb-player-info');
+    if(!state.player){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    var p=state.player;
+    box.classList.remove('hidden');
+    box.innerHTML =
+      '<span>'+esc(p.name)+'</span><span class="sb-sep">·</span>'+
+      '<span>'+esc(p.team ? p.team.name : '무소속')+'</span><span class="sb-sep">·</span>'+
+      '<span>만 '+p.age+'세</span><span class="sb-sep">·</span>'+
+      '<span>프로 '+p.careerYears+'년차</span>';
+  }
+
+  function render(){
+    updateScoreboardBar();
+    showScreen('screen-'+state.screen);
+    if(state.screen==='title') renderTitle();
+    if(state.screen==='create') renderCreate();
+    if(state.screen==='highschool') renderHighschool();
+    if(state.screen==='draft') renderDraft();
+    if(state.screen==='hub') renderHub();
+    if(state.screen==='ending') renderEnding();
+    if(state.screen==='archive') renderArchive();
+  }
+
+  /* ---- title ---- */
+  function renderTitle(){
+    var save=loadSave();
+    var btn=$('#btn-continue'), hint=$('#continue-hint');
+    if(save && save.player){
+      btn.classList.remove('hidden');
+      hint.classList.remove('hidden');
+      hint.textContent='저장된 커리어: '+save.player.name+' ('+(save.player.position==='pitcher'?'투수':'타자')+', '+save.player.careerYears+'년차)';
+    } else {
+      btn.classList.add('hidden');
+      hint.classList.add('hidden');
+    }
+  }
+
+  /* ---- archive ---- */
+  function renderArchive(){
+    var list = loadArchive();
+    var html = '<div class="eyebrow">기록 보관소</div><h2>내가 플레이한 선수들</h2>';
+    if(!list.length){
+      html += '<p class="lede">아직 은퇴한 선수가 없습니다. 커리어를 완주하면 이곳에 기록이 남습니다.</p>';
+    } else {
+      html += '<p class="lede" style="margin-bottom:14px;">총 '+list.length+'명의 커리어가 기록되어 있습니다.</p>';
+      html += list.map(function(r){
+        var posLabel = r.position==='pitcher' ? '투수' : (r.isDH ? '지명타자' : '타자');
+        var statLine = r.position==='batter'
+          ? ('통산 '+formatAvg(r.totals.avg)+' '+fmtNum(r.totals.h)+'안타 '+fmtNum(r.totals.hr)+'홈런 '+fmtNum(r.totals.rbi)+'타점')
+          : ('통산 '+fmtNum(r.totals.wins)+'승 '+fmtNum(r.totals.saves)+'세이브 '+fmtNum(r.totals.k)+'탈삼진 평균자책 '+r.totals.era.toFixed(2));
+        return '<div class="card" style="margin-bottom:12px;padding:16px 18px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;">'+
+            '<h3 style="margin:0;font-size:18px;">'+esc(r.name)+'</h3>'+
+            '<span class="l" style="font-size:12px;">'+posLabel+' · '+esc(r.finalTeam)+' · '+r.years+'년 · 은퇴 사유: '+esc(r.retiredReason)+'</span>'+
+          '</div>'+
+          '<div style="margin:6px 0;font-weight:700;color:var(--accent);">'+esc(r.title)+(r.hof?' · 명예의 전당 유력':'')+'</div>'+
+          '<p class="lede" style="font-size:13px;margin:0;">'+statLine+(r.totalEarnings?(' · 통산 총수입 '+fmtMoney(r.totalEarnings)):'')+'</p>'+
+          (r.traits && r.traits.length ? '<div style="margin-top:6px;">'+r.traits.map(function(t){ return '<span class="award-pill">'+esc(t)+'</span>'; }).join('')+'</div>' : '')+
+          (r.awards.length ? '<div style="margin-top:8px;">'+r.awards.map(function(a){ return '<span class="award-pill">'+esc(a)+'</span>'; }).join('')+'</div>' : '')+
+        '</div>';
+      }).join('');
+    }
+    html += '<div class="btn-row"><button class="btn btn-outline" data-action="close-archive">타이틀로 돌아가기</button></div>';
+    $('#archive-card').innerHTML=html;
+  }
+
+  /* ---- create ---- */
+  function renderCreate(){
+    var c=state.create;
+    $('#input-name').value=c.name;
+
+    $('#choice-batter').classList.toggle('selected', c.position==='batter');
+    $('#choice-pitcher').classList.toggle('selected', c.position==='pitcher');
+    $('#choice-batter').setAttribute('aria-pressed', c.position==='batter' ? 'true' : 'false');
+    $('#choice-pitcher').setAttribute('aria-pressed', c.position==='pitcher' ? 'true' : 'false');
+
+    var subWrap=$('#subrole-wrap'), subChips=$('#subrole-chips'), subLabel=$('#subrole-label');
+    if(c.position){
+      subWrap.classList.remove('hidden');
+      var list = c.position==='batter' ? BATTER_SUBROLES : PITCHER_SUBROLES;
+      subLabel.textContent = c.position==='batter' ? '수비 포지션' : '투수 유형';
+      subChips.innerHTML = list.map(function(v){
+        return '<button type="button" class="chip'+(c.subrole===v?' selected':'')+'" data-action="choose-subrole" data-sub="'+v+'">'+v+'</button>';
+      }).join('');
+    } else {
+      subWrap.classList.add('hidden');
+    }
+
+    var pos=c.position||'batter';
+    if(!c.stats){ c.stats=freshAllocation(pos); c.remaining=ALLOC_BUDGET; }
+
+    var fakePlayer={position:pos, subrole:c.subrole, stats:c.stats};
+    var ovr=overall(fakePlayer);
+    $('#alloc-readout').innerHTML='잔여 포인트 <b>'+c.remaining+'</b> / '+ALLOC_BUDGET;
+
+    var html = '<div class="stat-value" style="margin-bottom:14px;">현재 종합능력치 <b>'+ovr+'</b></div>';
+    html += statList(pos).map(function(s){
+      var v=c.stats[s.key];
+      var cap=CREATE_STAT_CAP;
+      var atCap = v>=cap;
+      var atFloor = v<=STAT_FLOOR;
+      return (
+        '<div class="stat-row">'+
+          '<div class="stat-row-top"><span class="stat-name">'+s.label+'</span><span class="stat-value"><b>'+v+'</b> / 99 <span style="opacity:.7">(신인 한계 '+cap+')</span></span></div>'+
+          '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div><div class="stat-cap" style="left:'+cap+'%"></div></div>'+
+          '<div class="stat-adjust">'+
+            '<button type="button" class="adjust-btn" data-action="create-stat-dec" data-stat="'+s.key+'" data-step="10" '+(atFloor?'disabled':'')+'>−10</button>'+
+            '<button type="button" class="adjust-btn" data-action="create-stat-dec" data-stat="'+s.key+'" data-step="1" '+(atFloor?'disabled':'')+'>−</button>'+
+            '<button type="button" class="adjust-btn" data-action="create-stat-inc" data-stat="'+s.key+'" data-step="1" '+((c.remaining<=0||atCap)?'disabled':'')+'>+</button>'+
+            '<button type="button" class="adjust-btn" data-action="create-stat-inc" data-stat="'+s.key+'" data-step="10" '+((c.remaining<=0||atCap)?'disabled':'')+'>+10</button>'+
+            (atCap?'<span class="stat-value" style="font-size:12px;">신인 한계</span>':'')+
+          '</div>'+
+        '</div>'
+      );
+    }).join('');
+    $('#create-stats').innerHTML=html;
+
+    $('#alloc-hint').textContent = c.remaining>0 ? ('아직 '+c.remaining+'포인트가 남아 있어요. 모두 배분해야 다음 단계로 진행할 수 있어요.') : '';
+
+    $('#btn-confirm-create').disabled = !(c.name && c.name.trim().length>0 && c.position && c.remaining===0);
+  }
+
+  /* ---- high school ---- */
+  function renderHighschool(){
+    var p=state.player;
+    $('#hs-title').textContent=p.name+' — 고교 3학년';
+    $('#hs-intro').textContent =
+      (p.position==='pitcher'
+        ? p.name+'는(은) 마운드에 오르는 '+p.subrole+' 유형의 투수 유망주입니다. '
+        : p.name+'는(은) '+p.subrole+'를 맡고 있는 타자 유망주입니다. ') +
+      '마지막 고교 시즌 성적이 드래프트 순위를 좌우합니다.';
+
+    var resBox=$('#hs-result');
+    if(state.hsResult){
+      resBox.classList.remove('hidden');
+      var r=state.hsResult, s=r.summary, grid;
+      if(p.position==='batter'){
+        grid=[
+          {v:s.games, l:'출장'}, {v:s.ab, l:'타수'}, {v:s.h, l:'안타'},
+          {v:s.hr, l:'홈런'}, {v:formatAvg(s.avg), l:'타율'}
+        ];
+      } else {
+        grid=[
+          {v:s.games, l:'등판'}, {v:s.ip, l:'이닝'},
+          {v:s.era.toFixed(2), l:'평균자책점'}, {v:s.k, l:'탈삼진'}
+        ];
+      }
+      $('#hs-stat-grid').innerHTML = grid.map(function(g){
+        return '<div class="stat-line-cell"><div class="v">'+g.v+'</div><div class="l">'+g.l+'</div></div>';
+      }).join('');
+      var g2=scoutGrade(r.score);
+      $('#hs-comment').innerHTML = '스카우트 등급 <b style="color:var(--accent);font-family:var(--font-mono);font-size:16px;">'+g2.grade+'</b> — '+g2.label+'. 이 시즌 활약을 바탕으로 곧 드래프트가 진행됩니다.';
+      $('#btn-hs-action').textContent='드래프트 결과 확인하기';
+      $('#btn-hs-action').setAttribute('data-action','go-to-draft');
+    } else {
+      resBox.classList.add('hidden');
+      $('#btn-hs-action').textContent='고3 마지막 시즌 시작';
+      $('#btn-hs-action').setAttribute('data-action','start-hs-season');
+    }
+  }
+
+  /* ---- draft ---- */
+  function renderDraft(){
+    var p=state.player, d=state.draftResult;
+    var actions=$('#draft-actions');
+    if(d.drafted){
+      $('#draft-title').textContent='지명되었습니다!';
+      $('#draft-body').innerHTML =
+        '<div class="stat-line-grid">'+
+          '<div class="stat-line-cell"><div class="v">'+d.round+'R</div><div class="l">라운드</div></div>'+
+          '<div class="stat-line-cell"><div class="v">'+d.pick+'번</div><div class="l">지명 순번</div></div>'+
+          '<div class="stat-line-cell"><div class="v">'+fmtMoney(d.bonus)+'</div><div class="l">계약금</div></div>'+
+        '</div>'+
+        '<p class="lede"><span class="team-badge" style="background:'+d.team.color+';width:28px;height:28px;font-size:13px;display:inline-flex;vertical-align:middle;margin-right:8px;border-radius:6px;">'+esc(p.name[0])+'</span>'+
+        '<b style="font-family:var(--font-display);font-size:18px;">'+esc(d.team.name)+'</b>가(이) '+esc(p.name)+' 선수를 지명했습니다.</p>';
+      actions.innerHTML='<button class="btn btn-primary" data-action="start-pro-career">프로 데뷔</button>';
+    } else {
+      $('#draft-title').textContent='이번 드래프트에서는 호명되지 않았습니다';
+      $('#draft-body').innerHTML =
+        '<p class="lede">10개 구단 모두 '+esc(p.name)+' 선수를 지명하지 않았습니다. 하지만 야구를 포기하기엔 이릅니다 — 육성선수 신분으로 입단해 실력으로 증명할 기회가 남아있습니다.</p>';
+      actions.innerHTML='<button class="btn btn-primary" data-action="sign-developmental">육성선수로 입단</button>';
+    }
+  }
+
+  /* ---- hub ---- */
+  function renderHub(){
+    var p=state.player;
+    var ovr=overall(p);
+    var fa = (p.fanApproval===undefined||p.fanApproval===null) ? 50 : p.fanApproval;
+
+    $('#player-card').innerHTML =
+      '<div class="pc-head">'+
+        '<div class="team-badge" style="background:'+(p.team?p.team.color:'#666')+'">'+esc(p.name[0])+'</div>'+
+        '<div><div class="pc-name">'+esc(p.name)+'</div><div class="pc-sub">'+(p.position==='pitcher'?'투수':'타자')+' · '+esc(p.subrole)+'</div></div>'+
+      '</div>'+
+      '<div class="ovr-badge"><span class="n">'+ovr+'</span><span class="l">종합</span></div>'+
+      '<div class="pc-meta">'+
+        '<div><span>소속</span><span>'+esc(p.team?p.team.name:'무소속')+'</span></div>'+
+        '<div><span>나이</span><span>만 '+p.age+'세</span></div>'+
+        '<div><span>연차</span><span>프로 '+p.careerYears+'년차</span></div>'+
+        '<div><span>연봉</span><span>'+fmtMoney(p.salary)+'</span></div>'+
+        '<div><span>팬 여론</span><span>'+fanApprovalLabel(fa)+' ('+fa+')</span></div>'+
+      '</div>'+
+      '<div class="stat-track" style="margin:-10px 0 18px;"><div class="stat-fill" style="width:'+fa+'%;background:linear-gradient(90deg,var(--danger),var(--accent),var(--turf));"></div></div>'+
+      statList(p.position).map(function(s){
+        var v=p.stats[s.key];
+        return (
+          '<div class="stat-row">'+
+            '<div class="stat-row-top"><span class="stat-name">'+s.label+'</span><span class="stat-value"><b>'+v+'</b>/99</span></div>'+
+            '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div></div>'+
+          '</div>'
+        );
+      }).join('') +
+      '<button class="btn btn-danger" style="width:100%;margin-top:10px;" data-action="ask-retire">은퇴 상담</button>';
+
+    $('#tab-player').classList.toggle('hidden', state.hubTab!=='player');
+    $('#tab-records').classList.toggle('hidden', state.hubTab!=='records');
+    $$('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===state.hubTab); });
+
+    if(state.hubTab==='player') renderTabTraining();
+    if(state.hubTab==='records') renderTabRecords();
+  }
+
+  // Formerly a free "spend points up to potential" training tab. Now growth only comes from
+  // how the season actually goes (plus events) — this panel just lets the player pick which
+  // stat to lean into, nudging (not guaranteeing) where that growth lands.
+  function renderTabTraining(){
+    var p=state.player;
+    var stats=statList(p.position);
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 시즌 준비</div>'+
+      '<h2>성장 포커스를 선택하세요</h2>'+
+      '<p class="lede" style="font-size:13px;">능력치는 더 이상 저절로 오르지 않습니다 — 이번 시즌 활약과 이벤트 선택에 따라 성장합니다. 아래에서 중점적으로 키우고 싶은 능력치를 고르면, 그 능력치가 성장할 확률이 높아집니다.</p>';
+
+    html += '<div class="chip-row" style="margin:14px 0 18px;flex-wrap:wrap;">'+
+      '<button type="button" class="chip'+(!p.growthFocus?' selected':'')+'" data-action="set-growth-focus" data-stat="">균형 성장</button>'+
+      stats.map(function(s){
+        return '<button type="button" class="chip'+(p.growthFocus===s.key?' selected':'')+'" data-action="set-growth-focus" data-stat="'+s.key+'">'+s.label+' 집중</button>';
+      }).join('')+
+    '</div>';
+
+    html += stats.map(function(s){
+      var v=p.stats[s.key];
+      return (
+        '<div class="stat-row">'+
+          '<div class="stat-row-top"><span class="stat-name">'+s.label+(p.growthFocus===s.key?' <span style="color:var(--accent);">★</span>':'')+'</span><span class="stat-value"><b>'+v+'</b>/99</span></div>'+
+          '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div></div>'+
+        '</div>'
+      );
+    }).join('');
+
+    html += '<div class="btn-row">'+
+      '<button class="btn btn-primary" data-action="start-season">'+p.careerYears+'년차 시즌 시작</button>'+
+    '</div>';
+
+    $('#tab-player').innerHTML=html;
+  }
+
+  function renderTabRecords(){
+    var p=state.player;
+    var html = '<div class="eyebrow">기록실</div><h2>커리어 통산 기록</h2>';
+
+    if(!p.history.length){
+      html += '<p class="lede">아직 프로 시즌을 치르지 않았습니다.</p>';
+    } else {
+      html += '<div class="table-wrap"><table><thead><tr>';
+      if(p.position==='batter'){
+        html += '<th>연차</th><th class="col-age">나이</th><th class="col-team">소속</th><th>경기</th><th>타율</th><th>안타</th><th>홈런</th><th>타점</th><th>도루</th><th>OPS</th>';
+      } else {
+        html += '<th>연차</th><th class="col-age">나이</th><th class="col-team">소속</th><th>경기</th><th>이닝</th><th>평균자책</th><th>승</th><th class="col-losses">패</th><th>세이브</th><th>홀드</th><th>탈삼진</th>';
+      }
+      html += '</tr></thead><tbody>';
+      p.history.forEach(function(row){
+        var l=row.line;
+        html += '<tr><td>'+row.year+'</td><td class="col-age">'+row.age+'</td><td class="col-team">'+esc(row.teamName)+'</td>';
+        if(p.position==='batter'){
+          html += '<td>'+l.games+'</td><td>'+formatAvg(l.avg)+'</td><td>'+l.h+'</td><td>'+l.hr+'</td><td>'+l.rbi+'</td><td>'+l.sb+'</td><td>'+l.ops.toFixed(3)+'</td>';
+        } else {
+          html += '<td>'+l.games+'</td><td>'+l.ip.toFixed(1)+'</td><td>'+l.era.toFixed(2)+'</td><td>'+l.wins+'</td><td class="col-losses">'+l.losses+'</td><td>'+l.saves+'</td><td>'+(l.holds||0)+'</td><td>'+l.k+'</td>';
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+
+      var totals=aggregateCareer(p);
+      html += '<hr class="divider"><h3 style="font-size:17px;">통산 합계</h3>';
+      if(p.position==='batter'){
+        html += '<div class="stat-line-grid">'+
+          [['games','경기'],['ab','타수'],['h','안타'],['hr','홈런'],['rbi','타점'],['sb','도루'],['errors','실책']].map(function(pair){
+            return '<div class="stat-line-cell"><div class="v">'+totals[pair[0]]+'</div><div class="l">'+pair[1]+'</div></div>';
+          }).join('') +
+          '<div class="stat-line-cell"><div class="v">'+formatAvg(totals.avg)+'</div><div class="l">통산타율</div><div class="avg-kr">'+formatAvgKR(totals.avg)+'</div></div>'+
+        '</div>';
+      } else {
+        html += '<div class="stat-line-grid">'+
+          [['games','경기'],['wins','승'],['losses','패'],['saves','세이브'],['holds','홀드'],['k','탈삼진']].map(function(pair){
+            return '<div class="stat-line-cell"><div class="v">'+totals[pair[0]]+'</div><div class="l">'+pair[1]+'</div></div>';
+          }).join('') +
+          '<div class="stat-line-cell"><div class="v">'+totals.era.toFixed(2)+'</div><div class="l">통산평균자책</div></div>'+
+        '</div>';
+      }
+    }
+
+    if(p.awardsAll && p.awardsAll.length){
+      html += '<hr class="divider"><h3 style="font-size:17px;">수상 내역</h3><div>'+
+        p.awardsAll.map(function(a){ return '<span class="award-pill">'+a.year+'년 '+a.name+'</span>'; }).join('')+
+      '</div>';
+    }
+
+    if(p.highlights && p.highlights.length){
+      html += '<hr class="divider"><h3 style="font-size:17px;">커리어 하이라이트</h3>' +
+        p.highlights.slice().reverse().map(function(h){
+          return '<div class="log-item"><span class="tag">'+h.year+'년</span>'+esc(h.text)+'</div>';
+        }).join('');
+    }
+
+    $('#tab-records').innerHTML=html;
+  }
+
+  function aggregateCareer(p){
+    var t={games:0,ab:0,h:0,hr:0,rbi:0,sb:0,tb:0,bb:0,errors:0,ip:0,er:0,k:0,wins:0,losses:0,saves:0,holds:0,bbp:0,hp:0};
+    p.history.forEach(function(row){
+      var l=row.line;
+      if(p.position==='batter'){
+        t.games+=l.games; t.ab+=l.ab; t.h+=l.h; t.hr+=l.hr; t.rbi+=l.rbi; t.sb+=l.sb; t.tb+=l.tb; t.bb+=l.bb; t.errors+=(l.errors||0);
+      } else {
+        t.games+=l.games; t.ip+=l.ip; t.er+=l.er; t.k+=l.k; t.wins+=l.wins; t.losses+=l.losses; t.saves+=l.saves; t.holds+=(l.holds||0); t.hp+=l.h; t.bbp+=l.bb;
+      }
+    });
+    t.avg = t.h/(t.ab||1);
+    t.era = t.ip>0 ? (t.er*9/t.ip) : 0;
+    return t;
+  }
+
+  /* ---- KBO all-time records comparison ---- */
+  function renderKboComparisonHtml(p, totals){
+    var rows = [];
+    if(p.position==='batter'){
+      rows.push({key:'hits', value:totals.h});
+      rows.push({key:'homeRuns', value:totals.hr});
+      rows.push({key:'rbi', value:totals.rbi});
+      rows.push({key:'steals', value:totals.sb});
+    } else {
+      rows.push({key:'wins', value:totals.wins});
+      rows.push({key:'strikeouts', value:totals.k});
+      if(totals.saves>=20) rows.push({key:'saves', value:totals.saves});
+      if((totals.holds||0)>=20) rows.push({key:'holds', value:totals.holds});
+    }
+    var lines = rows.map(function(r){
+      var rec = KBO_RECORDS[r.key];
+      var n = findKboNeighbors(rec.list, r.value);
+      var head = '<b>'+rec.label+'</b> '+fmtNum(r.value)+rec.unit;
+      var detail;
+      if(n.aboveTop){
+        detail = n.tie
+          ? ('역대 1위 '+esc(n.top.name)+'('+fmtNum(n.top.value)+rec.unit+')과 타이를 이루는 대기록입니다!')
+          : ('역대 1위 '+esc(n.top.name)+'('+fmtNum(n.top.value)+rec.unit+') 기록을 뛰어넘는 전무후무한 기록입니다!');
+      } else if(n.belowAll){
+        detail = '역대 top10 목록의 10위 '+esc(n.last.name)+'('+fmtNum(n.last.value)+rec.unit+')에는 아직 못 미칩니다.';
+      } else if(n.tie){
+        detail = esc(n.below.name)+'('+fmtNum(n.below.value)+rec.unit+')과 타이를 이룹니다 — 내 위: '+esc(n.above.name)+'('+fmtNum(n.above.value)+rec.unit+')';
+      } else {
+        detail = '내 위: '+esc(n.above.name)+'('+fmtNum(n.above.value)+rec.unit+') · 내 바로 아래: '+esc(n.below.name)+'('+fmtNum(n.below.value)+rec.unit+')';
+      }
+      return '<div class="log-item">'+head+' — '+detail+'</div>';
+    });
+    if(!lines.length) return '';
+    return '<hr class="divider"><h3 style="font-size:17px;">KBO 통산 기록과 비교</h3>'+lines.join('')+
+      '<p class="lede" style="font-size:12px;margin-top:10px;">* 위 기록은 KBO 통산 상위 기록 스냅샷이며, 현역 선수의 실제 기록은 이후 더 늘었을 수 있습니다.</p>';
+  }
+
+  /* ---- ending ---- */
+  function renderEnding(){
+    var p=state.player;
+    var ct=careerTitle(p);
+    var totals=aggregateCareer(p);
+    var traits=deriveTraits(p, totals);
+    var html = '<div class="eyebrow">은퇴</div>'+
+      '<h1>'+esc(p.name)+', 유니폼을 벗다</h1>'+
+      '<p class="lede">만 '+p.age+'세, 프로 '+p.careerYears+'년의 커리어를 마무리했습니다'+(state.forcedRetireReason==='나이'?' (노쇠화로 인한 은퇴)':state.forcedRetireReason==='방출'?' (부진으로 인한 방출 후 은퇴)':'')+'.</p>'+
+      '<div class="stat-line-grid" style="margin:22px 0;">'+
+        '<div class="stat-line-cell"><div class="v" style="font-size:26px;">'+esc(ct.title)+'</div><div class="l">커리어 평가</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+fmtMoney(p.totalEarnings||0)+'</div><div class="l">통산 총수입</div></div>'+
+      '</div>';
+
+    if(ct.hof){
+      html += '<p style="color:var(--accent);font-weight:700;">명예의 전당 헌액이 유력한 커리어입니다.</p>';
+    }
+
+    if(traits.length){
+      html += '<div style="margin:10px 0 4px;">'+traits.map(function(t){ return '<span class="award-pill">'+esc(t)+'</span>'; }).join('')+'</div>';
+    }
+
+    html += '<hr class="divider"><h3 style="font-size:17px;">통산 기록</h3>';
+    if(p.position==='batter'){
+      html += '<div class="stat-line-grid">'+
+        [['games','경기'],['ab','타수'],['h','안타'],['hr','홈런'],['rbi','타점'],['sb','도루'],['errors','실책']].map(function(pair){
+          return '<div class="stat-line-cell"><div class="v">'+totals[pair[0]]+'</div><div class="l">'+pair[1]+'</div></div>';
+        }).join('') +
+        '<div class="stat-line-cell"><div class="v">'+formatAvg(totals.avg)+'</div><div class="l">통산타율</div><div class="avg-kr">'+formatAvgKR(totals.avg)+'</div></div>'+
+      '</div>';
+    } else {
+      html += '<div class="stat-line-grid">'+
+        [['games','경기'],['wins','승'],['losses','패'],['saves','세이브'],['holds','홀드'],['k','탈삼진']].map(function(pair){
+          return '<div class="stat-line-cell"><div class="v">'+totals[pair[0]]+'</div><div class="l">'+pair[1]+'</div></div>';
+        }).join('') +
+        '<div class="stat-line-cell"><div class="v">'+totals.era.toFixed(2)+'</div><div class="l">통산평균자책</div></div>'+
+      '</div>';
+    }
+
+    html += renderKboComparisonHtml(p, totals);
+
+    if(p.awardsAll && p.awardsAll.length){
+      html += '<h3 style="font-size:17px;">수상 내역</h3><div style="margin-bottom:10px;">'+
+        p.awardsAll.map(function(a){ return '<span class="award-pill">'+a.year+'년 '+a.name+'</span>'; }).join('')+
+      '</div>';
+    }
+
+    if(p.history.length){
+      html += '<div class="table-wrap"><table><thead><tr>';
+      if(p.position==='batter'){
+        html += '<th>연차</th><th class="col-age">나이</th><th class="col-team">소속</th><th>경기</th><th>타율</th><th>안타</th><th>홈런</th><th>타점</th>';
+      } else {
+        html += '<th>연차</th><th class="col-age">나이</th><th class="col-team">소속</th><th>경기</th><th>이닝</th><th>평균자책</th><th>승</th><th class="col-losses">패</th><th>세이브</th><th>홀드</th>';
+      }
+      html += '</tr></thead><tbody>';
+      p.history.forEach(function(row){
+        var l=row.line;
+        html += '<tr><td>'+row.year+'</td><td class="col-age">'+row.age+'</td><td class="col-team">'+esc(row.teamName)+'</td>';
+        if(p.position==='batter'){
+          html += '<td>'+l.games+'</td><td>'+formatAvg(l.avg)+'</td><td>'+l.h+'</td><td>'+l.hr+'</td><td>'+l.rbi+'</td>';
+        } else {
+          html += '<td>'+l.games+'</td><td>'+l.ip.toFixed(1)+'</td><td>'+l.era.toFixed(2)+'</td><td>'+l.wins+'</td><td class="col-losses">'+l.losses+'</td><td>'+l.saves+'</td><td>'+(l.holds||0)+'</td>';
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    html += '<div class="btn-row"><button class="btn btn-primary" data-action="restart-game">새 커리어 시작하기</button></div>';
+    $('#ending-card').innerHTML=html;
+  }
+
+  /* ---------------- season report modal ---------------- */
+  function openSeasonModal(contentHtml){
+    $('#modal-season-panel').innerHTML=contentHtml;
+    $('#modal-season').classList.remove('hidden');
+  }
+  function closeSeasonModal(){ $('#modal-season').classList.add('hidden'); }
+
+  /* ---- season flow: mid-season events -> stat report -> awards ceremony -> negotiation/retirement -> advance ---- */
+  function startSeasonFlow(){
+    var p=state.player;
+    state.forcedRetireReason=null;
+    var events=pickSeasonEvents(p);
+    state.seasonFlow={
+      step:'events', events:events, eventIndex:0, resolvedNarratives:[],
+      ctx:{ statBoost:{}, injuryRiskDelta:0, lineBoost:{} },
+      line:null, awards:[], seasonScoreVal:0, perf:0, teamOffer:0, reason:null
+    };
+    if(events.length===0){ finalizeSeasonEvents(); }
+    else { renderEventStep(); }
+    saveGame();
+  }
+
+  function renderEventStep(){
+    var sf=state.seasonFlow, p=state.player;
+    var ev=sf.events[sf.eventIndex];
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 시즌 · 이벤트 ('+(sf.eventIndex+1)+'/'+sf.events.length+')</div>'+
+      '<h2>'+esc(ev.prompt(p))+'</h2>'+
+      '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
+        ev.choices.map(function(ch, idx){
+          return '<button class="btn btn-outline" style="text-align:left;" data-action="event-choice" data-choice="'+idx+'">'+esc(ch.label)+'</button>';
+        }).join('')+
+      '</div>';
+    openSeasonModal(html);
+  }
+
+  // Every event choice's own written-in effect (see EVENT_POOL) still happens exactly as
+  // designed, but on top of that, ANY choice — the "safe" one included — has a real chance
+  // of a small unrelated swing of luck, good or bad. Without this, a choice with no
+  // downside written into it was a completely free pick every time, and a choice with no
+  // upside was one nobody would ever choose — there was no actual decision being made, just
+  // pattern-memorization of which button is "the good one." A blind 15/15/70 split keeps
+  // every choice honestly uncertain without swamping that choice's own designed effect.
+  function rollEventTwist(p, ctx){
+    var roll=Math.random();
+    if(roll<0.15){
+      if(Math.random()<0.5){
+        adjustFan(p, randInt(2,6));
+        return '(예상치 못하게 좋은 흐름이 따라오며 팬들의 반응도 좋아졌습니다.)';
+      } else {
+        var keys=statList(p.position).map(function(s){ return s.key; });
+        var key=pick(keys);
+        ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(1,3);
+        return '(뜻밖의 좋은 컨디션이 찾아와 이번 시즌 몸 상태가 조금 더 좋아졌습니다.)';
+      }
+    }
+    if(roll<0.30){
+      if(Math.random()<0.5){
+        adjustFan(p, -randInt(2,6));
+        return '(사소한 구설수에 오르며 여론이 살짝 나빠졌습니다.)';
+      } else {
+        ctx.injuryRiskDelta += rand(0.02,0.05);
+        return '(가벼운 컨디션 난조로 부상 위험이 살짝 늘었습니다.)';
+      }
+    }
+    return null;
+  }
+
+  function resolveEventChoice(choiceIdx){
+    var sf=state.seasonFlow, p=state.player;
+    var ev=sf.events[sf.eventIndex];
+    var choice=ev.choices[choiceIdx];
+    if(!choice) return;
+    var narrative=choice.resolve(p, sf.ctx);
+    var twist=rollEventTwist(p, sf.ctx);
+    if(twist) narrative += ' ' + twist;
+    sf.resolvedNarratives.push(narrative);
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 시즌 · 이벤트 결과</div>'+
+      '<p class="lede">'+esc(narrative)+'</p>'+
+      '<div class="btn-row"><button class="btn btn-primary" data-action="event-next">계속</button></div>';
+    openSeasonModal(html);
+  }
+
+  function advanceEventStep(){
+    var sf=state.seasonFlow;
+    sf.eventIndex+=1;
+    if(sf.eventIndex < sf.events.length){ renderEventStep(); }
+    else { finalizeSeasonEvents(); }
+  }
+
+  function finalizeSeasonEvents(){
+    var sf=state.seasonFlow, p=state.player;
+    var isRookie = p.careerYears===1;
+    var effStats={};
+    statList(p.position).forEach(function(s){
+      effStats[s.key]=roundClamp(p.stats[s.key]+(sf.ctx.statBoost[s.key]||0), 10, 99);
+    });
+    var effPlayer={ position:p.position, subrole:p.subrole, stats:effStats, isDH:p.isDH };
+    var line, awardScore;
+    if(p.position==='batter'){
+      line=simulateBatterSeason(effPlayer, sf.ctx.injuryRiskDelta);
+    } else {
+      line=simulatePitcherSeason(effPlayer, sf.ctx.injuryRiskDelta);
+    }
+    // Direct season-output adjustments from in-game decision events (steal attempts,
+    // risky defensive plays, and the like) are layered on top of the simulated line here.
+    applyLineBoost(p, line, sf.ctx.lineBoost);
+    awardScore = p.position==='batter' ? seasonScoreBatter(line) : seasonScorePitcher(line);
+    var awards=determineAwards(p, line, isRookie);
+
+    p.history.push({year:p.careerYears, age:p.age, teamName:p.team?p.team.name:'무소속', line:line});
+    p.careerScore=(p.careerScore||0)+awardScore;
+    awards.forEach(function(a){ p.awardsAll.push({year:p.careerYears, name:a}); });
+    // The salary that was actually in effect during the season just played goes toward the
+    // career earnings total (negotiation below only sets pay for the *next* season).
+    p.totalEarnings=(p.totalEarnings||0)+(p.salary||0);
+
+    sf.perf=computePerf(p, awardScore);
+
+    var hi=[];
+    if(line.injury) hi.push(line.injury+'으로 시즌 중 이탈했지만 복귀해 시즌을 마쳤습니다.');
+    if(awards.indexOf('정규시즌 MVP')>-1) hi.push('압도적인 활약으로 정규시즌 MVP급 시즌을 보냈습니다.');
+    else if(awards.indexOf('골든글러브')>-1) hi.push('팀 내 핵심 전력으로 자리매김한 시즌이었습니다.');
+    if(p.position==='batter' && line.hr>=30) hi.push('시즌 '+line.hr+'홈런을 쏘아올렸습니다.');
+    if(p.position==='pitcher' && line.era<=3.0 && line.ip>=100) hi.push('평균자책점 '+line.era.toFixed(2)+'로 안정된 시즌을 보냈습니다.');
+
+    // Growth is earned entirely by how the season went — no more free training points.
+    // A chosen growth focus gets its OWN reliable training pass (large flat success-chance
+    // bonus) so committing to a stat has a clear, felt payoff — separate from the smaller,
+    // luck-driven growth everyone gets from how the season went overall.
+    var growthList=statList(p.position);
+    var growthKeys=growthList.map(function(s){ return s.key; });
+    var focusKey = (p.growthFocus && growthKeys.indexOf(p.growthFocus)>-1) ? p.growthFocus : null;
+    var focusHits=0;
+    if(focusKey){
+      var focusAttempts=roundClamp(1+Math.max(0,sf.perf)*2, 1, 3);
+      for(var fi=0; fi<focusAttempts; fi++){
+        var beforeF=p.stats[focusKey];
+        applyPermanentStatDelta(p, focusKey, 1, 0.4);
+        if(p.stats[focusKey]>beforeF) focusHits++;
+      }
+      var focusLabel=growthList.filter(function(s){ return s.key===focusKey; })[0].label;
+      if(focusHits>0){
+        hi.push('이번 시즌 '+focusLabel+' 위주로 훈련한 효과가 뚜렷하게 나타났습니다. ('+focusLabel+' +'+focusHits+')');
+      } else {
+        hi.push('이번 시즌 '+focusLabel+' 훈련에 공을 들였지만 눈에 띄는 성장은 없었습니다.');
+      }
+    }
+
+    // General, luck-driven growth from the season overall — smaller, and spread across
+    // any stat (including the focus stat again, occasionally).
+    var growthPoints=roundClamp(1+sf.perf*2, focusKey?0:1, focusKey?2:3);
+    for(var gi=0; gi<growthPoints; gi++){
+      applyPermanentStatDelta(p, pick(growthKeys), 1);
+    }
+    if(growthPoints>=2) hi.push('좋은 활약 덕분에 다른 능력치도 눈에 띄게 성장했습니다.');
+    else if(!focusKey && growthPoints<=0 && sf.perf<-0.4) hi.push('부진한 시즌으로 이번 해는 별다른 성장이 없었습니다.');
+
+    // Extra variance beyond the normal growth curve: a severe injury can leave a lasting
+    // mark, while every so often an unrelated breakthrough sends a stat sharply upward —
+    // careers shouldn't all follow the same smooth curve.
+    if(line.injury==='심각한 부상' && Math.random()<0.25){
+      var declineKey=pickAnyStat(p);
+      var declineAmt=randInt(2,5);
+      p.stats[declineKey]=roundClamp(p.stats[declineKey]-declineAmt,10,99);
+      p.severeInjuryCount=(p.severeInjuryCount||0)+1;
+      var declineLabel=growthList.filter(function(s){ return s.key===declineKey; })[0].label;
+      hi.push('부상의 여파가 남아 '+declineLabel+' 능력치가 영구적으로 떨어졌습니다. (-'+declineAmt+')');
+    }
+    if(Math.random()<0.08){
+      var breakKey=focusKey || pick(growthKeys);
+      var breakAmt=randInt(4,8);
+      p.stats[breakKey]=roundClamp(p.stats[breakKey]+breakAmt,10,99);
+      var breakLabel=growthList.filter(function(s){ return s.key===breakKey; })[0].label;
+      hi.push('예상치 못한 계기로 '+breakLabel+' 능력이 폭발적으로 성장했습니다! (+'+breakAmt+')');
+    }
+
+    hi.forEach(function(text){ p.highlights.push({year:p.careerYears, text:text}); });
+
+    sf.line=line; sf.awards=awards; sf.seasonScoreVal=awardScore; sf.hi=hi;
+    sf.reason=checkForcedRetirement(p);
+    state.forcedRetireReason=sf.reason;
+    sf.step='report';
+    renderReportStep();
+    saveGame();
+  }
+
+  function renderReportStep(){
+    var sf=state.seasonFlow, p=state.player, line=sf.line;
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 시즌 결과</div><h2>'+esc(p.name)+' — '+p.age+'세 시즌</h2>';
+    if(p.position==='batter'){
+      html += '<div class="stat-line-grid">'+
+        [[line.games,'경기'],[line.ab,'타수'],[line.h,'안타'],[line.doubles||0,'2루타'],[line.triples||0,'3루타'],[line.hr,'홈런'],[line.rbi,'타점'],[line.bb||0,'볼넷'],[line.k||0,'삼진'],[line.sb,'도루']]
+          .map(function(pr){ return '<div class="stat-line-cell"><div class="v">'+pr[0]+'</div><div class="l">'+pr[1]+'</div></div>'; }).join('')+
+        '<div class="stat-line-cell"><div class="v">'+formatAvg(line.avg)+'</div><div class="l">타율</div><div class="avg-kr">'+formatAvgKR(line.avg)+'</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+line.ops.toFixed(3)+'</div><div class="l">OPS</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+(line.errors||0)+'</div><div class="l">실책</div></div>'+
+      '</div>';
+    } else {
+      html += '<div class="stat-line-grid">'+
+        [[line.games,'등판'],[line.ip.toFixed(1),'이닝'],[line.wins,'승'],[line.losses,'패'],[line.saves,'세이브'],[line.holds||0,'홀드'],[line.k,'탈삼진']]
+          .map(function(pr){ return '<div class="stat-line-cell"><div class="v">'+pr[0]+'</div><div class="l">'+pr[1]+'</div></div>'; }).join('')+
+        '<div class="stat-line-cell"><div class="v">'+line.era.toFixed(2)+'</div><div class="l">평균자책점</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+line.whip.toFixed(2)+'</div><div class="l">WHIP</div></div>'+
+      '</div>';
+    }
+    if(sf.resolvedNarratives.length){
+      html += sf.resolvedNarratives.map(function(t){ return '<div class="log-item">'+esc(t)+'</div>'; }).join('');
+    }
+    if(sf.hi && sf.hi.length){
+      html += sf.hi.map(function(t){ return '<div class="log-item">'+esc(t)+'</div>'; }).join('');
+    }
+    html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-awards">시상식으로</button></div>';
+    openSeasonModal(html);
+  }
+
+  function renderAwardsStep(){
+    var sf=state.seasonFlow, p=state.player;
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 연말 시상식</div><h2>시상식</h2>';
+    if(sf.awards.length){
+      html += '<p class="lede" style="font-size:19px;color:var(--ink);font-weight:700;">'+esc(p.name)+' — '+sf.awards.join(' · ')+' 수상!</p>';
+      html += '<div style="margin:14px 0;">'+sf.awards.map(function(a){ return '<span class="award-pill">'+a+'</span>'; }).join('')+'</div>';
+    } else {
+      html += '<p class="lede">이번 시즌은 특별한 수상이 없었습니다. 다음 시즌을 기약합니다.</p>';
+    }
+    if(sf.reason){
+      html += '<hr class="divider"><p style="color:var(--danger);font-weight:700;">'+(sf.reason==='나이' ? '나이 기준을 넘어서 더 이상 선수 생활을 이어갈 수 없습니다.' : '2년 연속 부진으로 구단에서 방출되어 은퇴를 결정합니다.')+'</p>';
+      html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-retire">은퇴식으로 이동</button></div>';
+    } else {
+      html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-negotiation">연봉 협상으로</button></div>';
+    }
+    openSeasonModal(html);
+  }
+
+  function renderNegotiationStep(){
+    var sf=state.seasonFlow, p=state.player;
+    sf.teamOffer = teamOfferSalary(p, sf.perf);
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 연봉 협상</div><h2>연봉 협상</h2>'+
+      '<p class="lede">이번 시즌 성적을 바탕으로 구단이 제시한 금액은 <b style="color:var(--ink);">'+fmtMoney(sf.teamOffer)+'</b>입니다. (현재 연봉 '+fmtMoney(p.salary)+')</p>'+
+      '<p class="lede" style="font-size:12px;">현재 팬 여론: <b>'+fanApprovalLabel(p.fanApproval)+'</b> · '+(p.team?p.team.name:'현 소속팀')+'에서 '+(p.teamTenureYears||0)+'년째 활약 — 인기와 연차가 협상에 유리하게 작용합니다.</p>'+
+      '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="accept">제안을 수락한다 — 안전하게 '+fmtMoney(sf.teamOffer)+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="moderate">적당히 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.15))+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="aggressive">파격적인 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.5))+'</button>'+
+      '</div>'+
+      '<p class="lede" style="font-size:13px;margin-top:14px;">과한 요구는 성적이 기대에 못 미쳤을 때 오히려 연봉 삭감이나 트레이드로 이어질 수 있습니다.</p>';
+    openSeasonModal(html);
+  }
+
+  function resolveNegotiation(stance){
+    var sf=state.seasonFlow, p=state.player;
+    var offer=sf.teamOffer, perf=sf.perf;
+    // Popular, franchise-tenured players are harder for a club to say no to — fan approval
+    // and years spent with the same team both nudge the raise-success chance up.
+    var fanBonus=((p.fanApproval||50)-50)/250;
+    var tenureBonus=clamp((p.teamTenureYears||0)*0.015, 0, 0.12);
+    var narrative='';
+    if(stance==='accept'){
+      p.salary=offer;
+      narrative='구단의 제안을 수락했습니다. 연봉 '+fmtMoney(offer)+'에 계약했습니다.';
+      adjustFan(p, 1);
+      finalizeNegotiationNarrative(narrative);
+    } else if(stance==='moderate'){
+      var ask=capSalaryOffer(p, offer*1.15);
+      var chance=clamp(0.5+perf*0.4+fanBonus+tenureBonus,0.1,0.92);
+      if(Math.random()<chance){
+        p.salary=ask;
+        narrative='적극적인 인상 요구가 받아들여졌습니다! 연봉 '+fmtMoney(ask)+'에 계약했습니다.';
+        adjustFan(p,3);
+      } else {
+        p.salary=offer;
+        narrative='구단은 추가 인상 요구를 거절했습니다. 결국 최초 제안인 '+fmtMoney(offer)+'에 계약했습니다.';
+        adjustFan(p,-1);
+      }
+      finalizeNegotiationNarrative(narrative);
+    } else {
+      var bigAsk=capSalaryOffer(p, offer*1.5);
+      var chance2=clamp(0.35+perf*0.5+fanBonus+tenureBonus,0.05,0.90);
+      if(Math.random()<chance2){
+        p.salary=bigAsk;
+        narrative='파격적인 요구가 받아들여졌습니다! 대형 계약, 연봉 '+fmtMoney(bigAsk)+'!';
+        adjustFan(p,8);
+        finalizeNegotiationNarrative(narrative);
+      } else if(perf<0){
+        // Instead of an automatic coin-flip outcome, let the player choose how to respond
+        // to a rejected demand — stay at a cut rate, or jump to a rival's competing offer.
+        renderNegotiationFalloutChoice(offer);
+      } else {
+        p.salary=offer;
+        narrative='구단은 과한 요구라며 거절했습니다. 최초 제안인 '+fmtMoney(offer)+'에 계약했습니다.';
+        adjustFan(p,-2);
+        finalizeNegotiationNarrative(narrative);
+      }
+    }
+  }
+
+  function renderNegotiationFalloutChoice(offer){
+    var sf=state.seasonFlow, p=state.player;
+    var paycutOffer=Math.max(2700, Math.round(offer*0.78));
+    var candidates=TEAMS.filter(function(t){ return !p.team || t.name!==p.team.name; });
+    var rivalTeam=candidates[randInt(0,candidates.length-1)];
+    var rivalOffer=capSalaryOffer(p, offer*rand(0.92,1.28));
+    sf.fallout={ paycutOffer:paycutOffer, rivalTeam:rivalTeam, rivalOffer:rivalOffer };
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 연봉 협상 · 결렬</div><h2>무리한 요구에 구단이 등을 돌렸습니다</h2>'+
+      '<p class="lede">'+esc(p.team?p.team.name:'구단')+'은(는) 더 이상의 인상 요구를 받아들이지 않기로 했습니다. 어떻게 하시겠습니까?</p>'+
+      '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="stay">잔류를 택한다 — 삭감된 '+fmtMoney(paycutOffer)+'에 재계약</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="move">'+esc(rivalTeam.name)+'의 이적 제안을 수락한다 — '+fmtMoney(rivalOffer)+'</button>'+
+      '</div>'+
+      '<p class="lede" style="font-size:13px;margin-top:14px;">이적을 택하면 곧바로 '+esc(rivalTeam.name)+' 소속으로 다음 시즌을 맞이합니다.</p>';
+    openSeasonModal(html);
+  }
+
+  function resolveNegotiationFallout(choice){
+    var sf=state.seasonFlow, p=state.player, fo=sf.fallout;
+    var narrative;
+    if(choice==='move'){
+      var newTeam=performTrade(p, '무리한 연봉 요구 끝에', fo.rivalTeam);
+      p.salary=fo.rivalOffer;
+      // A trade already just happened here — if trade_rumor also left pendingTradeRequest
+      // set earlier this same season, that request's intent (leave the team) has already
+      // been satisfied by this one, so consume it now. Otherwise finalizeNegotiationNarrative
+      // would fire a SECOND trade right after this one — stacking two separate -6 fan-approval
+      // hits in one offseason, and since performTrade only excludes the player's CURRENT team,
+      // that second trade's candidate pool could send them right back to the team they just
+      // left in this trade.
+      p.pendingTradeRequest=false;
+      narrative='새 소속팀 '+newTeam.name+'와(과) '+fmtMoney(fo.rivalOffer)+'에 계약했습니다.';
+    } else {
+      p.salary=fo.paycutOffer;
+      narrative='한 발 물러나 삭감된 '+fmtMoney(fo.paycutOffer)+'에 잔류 계약을 맺었습니다.';
+      adjustFan(p,-5);
+    }
+    finalizeNegotiationNarrative(narrative);
+  }
+
+  function finalizeNegotiationNarrative(narrative){
+    var p=state.player;
+    if(p.pendingTradeRequest){
+      var newTeam2=performTrade(p, '본인의 이적 요청에 따라');
+      narrative += ' 그리고 시즌 후 '+newTeam2.name+'로 트레이드되었습니다.';
+    }
+    p.pendingTradeRequest=false;
+
+    p.highlights.push({year:p.careerYears, text:narrative});
+
+    var html = '<div class="eyebrow">협상 결과</div><h2>'+esc(p.name)+'의 새 계약</h2>'+
+      '<p class="lede">'+esc(narrative)+'</p>'+
+      '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-advance">다음 시즌으로</button></div>';
+    openSeasonModal(html);
+  }
+
+  function finishSeasonFlow(){
+    var p=state.player;
+    closeSeasonModal();
+    if(state.forcedRetireReason){
+      p.isRetired=true;
+      state.screen='ending';
+      state.seasonFlow=null;
+      archivePlayer(p);
+      clearSave();
+      render();
+      return;
+    }
+    p.age+=1;
+    p.careerYears+=1;
+    p.teamTenureYears=(p.teamTenureYears||0)+1;
+    applyAgingDecline(p);
+    p.growthFocus=null;
+    state.seasonFlow=null;
+    state.hubTab='player';
+    render();
+    saveGame();
+  }
+
+  /* ---------------- confirm modal ---------------- */
+  function openConfirm(message, confirmLabel, onConfirm){
+    var html = '<h2 style="font-size:20px;">'+esc(message)+'</h2>'+
+      '<div class="btn-row">'+
+        '<button class="btn btn-danger" id="confirm-yes">'+esc(confirmLabel)+'</button>'+
+        '<button class="btn btn-outline" id="confirm-no">취소</button>'+
+      '</div>';
+    $('#modal-confirm-panel').innerHTML=html;
+    $('#modal-confirm').classList.remove('hidden');
+    $('#confirm-yes').addEventListener('click', function(){
+      $('#modal-confirm').classList.add('hidden');
+      onConfirm();
+    });
+    $('#confirm-no').addEventListener('click', function(){
+      $('#modal-confirm').classList.add('hidden');
+    });
+  }
+
+  /* ---------------- actions ---------------- */
+  function handleAction(action, el){
+    var c=state.create, p=state.player;
+
+    if(action==='new-game'){
+      state.player=null; clearSave();
+      state.create={ name:'', position:null, subrole:null, stats:null, remaining:ALLOC_BUDGET };
+      state.hsResult=null; state.draftResult=null; state.forcedRetireReason=null;
+      state.screen='create';
+    }
+    else if(action==='continue-game'){
+      var save=loadSave();
+      if(save && save.player){
+        state.player=save.player;
+        state.screen = save.player.isRetired ? 'ending' : 'hub';
+        state.hubTab='player';
+      }
+    }
+    else if(action==='random-name'){ c.name=randomName(); }
+    else if(action==='choose-position'){
+      c.position=el.getAttribute('data-pos');
+      c.subrole=null; c.stats=null; c.remaining=ALLOC_BUDGET;
+    }
+    else if(action==='choose-subrole'){ c.subrole=el.getAttribute('data-sub'); }
+    else if(action==='create-stat-inc'){
+      var incKey=el.getAttribute('data-stat');
+      var incStep=parseInt(el.getAttribute('data-step')||'1',10);
+      var incCap=CREATE_STAT_CAP;
+      var incActual=Math.min(incStep, c.remaining, incCap-c.stats[incKey]);
+      if(incActual>0){ c.stats[incKey]+=incActual; c.remaining-=incActual; }
+    }
+    else if(action==='create-stat-dec'){
+      var decKey=el.getAttribute('data-stat');
+      var decStep=parseInt(el.getAttribute('data-step')||'1',10);
+      var decActual=Math.min(decStep, c.stats[decKey]-STAT_FLOOR);
+      if(decActual>0){ c.stats[decKey]-=decActual; c.remaining+=decActual; }
+    }
+    else if(action==='create-auto-allocate'){
+      var allocKeys=statList(c.position).map(function(s){ return s.key; });
+      var guard=0;
+      while(c.remaining>0 && guard<5000){
+        guard+=1;
+        var progressed=false;
+        for(var ai=0;ai<allocKeys.length;ai++){
+          var ak=allocKeys[ai];
+          var acap=CREATE_STAT_CAP;
+          if(c.remaining>0 && c.stats[ak]<acap){ c.stats[ak]+=1; c.remaining-=1; progressed=true; }
+        }
+        if(!progressed) break;
+      }
+    }
+    else if(action==='create-reset-allocate'){
+      c.stats=freshAllocation(c.position);
+      c.remaining=ALLOC_BUDGET;
+    }
+    else if(action==='confirm-create'){
+      if(!c.name || !c.position || c.remaining!==0) return;
+      if(!c.subrole) c.subrole = (c.position==='batter'?BATTER_SUBROLES:PITCHER_SUBROLES)[0];
+      state.player={
+        name:c.name.trim(), position:c.position, subrole:c.subrole,
+        stats:c.stats,
+        age:18, careerYears:0, team:null, salary:0,
+        growthFocus:null, history:[], careerScore:0,
+        lowFormYears:0, awardsAll:[], highlights:[], isRetired:false,
+        fanApproval:50, isDH:false, pendingTradeRequest:false,
+        teamTenureYears:0, tradeCount:0, severeInjuryCount:0, totalEarnings:0
+      };
+      state.hsResult=null;
+      state.screen='highschool';
+    }
+    else if(action==='start-hs-season'){
+      state.hsResult=simulateHighSchoolSeason(state.player);
+    }
+    else if(action==='go-to-draft'){
+      state.draftResult=runDraft(state.hsResult.score);
+      state.screen='draft';
+    }
+    else if(action==='sign-developmental'){
+      var randomTeam=TEAMS[randInt(0,TEAMS.length-1)];
+      p.team=randomTeam;
+      p.salary=startingSalary({drafted:false});
+      p.age=19; p.careerYears=1; p.teamTenureYears=0;
+      state.screen='hub'; state.hubTab='player';
+      saveGame();
+    }
+    else if(action==='start-pro-career'){
+      p.team=state.draftResult.team;
+      p.salary=startingSalary(state.draftResult);
+      p.draftInfo=state.draftResult;
+      p.age=19; p.careerYears=1; p.teamTenureYears=0;
+      p.totalEarnings=(p.totalEarnings||0)+(state.draftResult.bonus||0);
+      state.screen='hub'; state.hubTab='player';
+      saveGame();
+    }
+    else if(action==='switch-tab'){ state.hubTab=el.getAttribute('data-tab'); }
+    else if(action==='set-growth-focus'){
+      p.growthFocus = el.getAttribute('data-stat') || null;
+    }
+    else if(action==='start-season'){ startSeasonFlow(); return; }
+    else if(action==='event-choice'){ resolveEventChoice(parseInt(el.getAttribute('data-choice'),10)); return; }
+    else if(action==='event-next'){ advanceEventStep(); return; }
+    else if(action==='season-to-awards'){ state.seasonFlow.step='awards'; renderAwardsStep(); return; }
+    else if(action==='season-to-negotiation'){ state.seasonFlow.step='negotiation'; renderNegotiationStep(); return; }
+    else if(action==='negotiate'){ resolveNegotiation(el.getAttribute('data-stance')); return; }
+    else if(action==='negotiate-fallout'){ resolveNegotiationFallout(el.getAttribute('data-choice')); return; }
+    else if(action==='season-to-retire'){ finishSeasonFlow(); return; }
+    else if(action==='season-to-advance'){ finishSeasonFlow(); return; }
+    else if(action==='ask-retire'){
+      openConfirm('정말로 은퇴하시겠습니까? 이번 결정은 되돌릴 수 없습니다.', '은퇴하기', function(){
+        p.isRetired=true;
+        state.screen='ending';
+        archivePlayer(p);
+        clearSave();
+        render();
+      });
+      return;
+    }
+    else if(action==='restart-game'){
+      state.player=null; clearSave();
+      state.create={ name:'', position:null, subrole:null, stats:null, remaining:ALLOC_BUDGET };
+      state.hsResult=null; state.draftResult=null; state.forcedRetireReason=null;
+      state.screen='title';
+    }
+    else if(action==='open-archive'){ state.screen='archive'; }
+    else if(action==='close-archive'){ state.screen='title'; }
+
+    render();
+    saveGame();
+  }
+
+  document.addEventListener('click', function(e){
+    var el=e.target.closest('[data-action]');
+    if(!el) return;
+    handleAction(el.getAttribute('data-action'), el);
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key!=='Enter' && e.key!==' ') return;
+    var el=e.target.closest('[data-action]');
+    if(!el) return;
+    if(el.tagName==='BUTTON') return; // native activation already fires click
+    e.preventDefault();
+    handleAction(el.getAttribute('data-action'), el);
+  });
+
+  $('#input-name').addEventListener('input', function(e){
+    state.create.name=e.target.value;
+    var c=state.create;
+    $('#btn-confirm-create').disabled = !(c.name && c.name.trim().length>0 && c.position && c.remaining===0);
+  });
+
+  render();
+})();
+</script>
