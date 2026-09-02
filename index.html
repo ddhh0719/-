@@ -237,6 +237,15 @@
     font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;margin:2px 5px 2px 0;
   }
 
+  .achv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:14px 0;}
+  .achv-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);}
+  .achv-card.unlocked{border-color:var(--accent);background:var(--bg-elevated);}
+  .achv-card .achv-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;}
+  .achv-card.unlocked .achv-name{color:var(--accent);}
+  .achv-card.locked{opacity:.55;}
+  .achv-card .achv-desc{font-size:12px;color:var(--ink-dim);margin-top:3px;}
+  .achv-card .achv-year{font-family:var(--font-mono);font-size:10px;color:var(--turf);margin-top:4px;}
+
   /* ---------- modal ---------- */
   .modal-overlay{
     position:fixed;inset:0;background:rgba(8,12,20,.6);display:flex;align-items:center;justify-content:center;
@@ -746,7 +755,14 @@
     // hitter in a career-best season only brushes the high .370s, and only in the smallest,
     // luck-swingiest sample sizes (a short, injury-hit season) — a full 144-game season tops
     // out a shade lower.
-    var avg=clamp(0.180+(s.contact/99)*0.125+(s.speed/99)*0.025+(s.mental/99)*0.020+rand(-0.024*varScale,0.024*varScale),0.140,0.380);
+    // Baseline dropped again 0.180->0.170 (2026-09, "성적 계산도 조금 어렵게" pass): since OVR now
+    // climbs faster than before, leaving the SAME stat-to-output curve in place meant an early-
+    // career player with still-modest stats already posted star-level numbers. A contact of 75
+    // used to be enough on its own to clear .300 (baseline .180 + .125*75/99 ≈ .297); dropping
+    // the baseline ~10 points pushes that same read out to roughly contact 85 instead, so hitting
+    // .300 now takes a genuinely good, not just decent, contact stat — same shape of curve, just
+    // shifted so growth has to actually pay off before results look great.
+    var avg=clamp(0.170+(s.contact/99)*0.125+(s.speed/99)*0.025+(s.mental/99)*0.020+rand(-0.024*varScale,0.024*varScale),0.130,0.380);
     var h=Math.round(ab*avg);
     // Home runs are power-driven but contact also matters — barreling the ball up requires
     // making contact in the first place, so a high-power/low-contact slugger doesn't get
@@ -818,7 +834,12 @@
     // Mental now shaves a bit off both ERA and walk rate (composure under pressure, fewer
     // free passes in tight counts) — the raw-stuff coefficients are trimmed slightly so
     // mental is a real contributor rather than a rounding error.
-    var era=clamp(6.4-(s.control/99)*3.0-(s.breaking/99)*1.4-(s.velocity/99)*0.8-(s.mental/99)*0.5+rand(-0.4,0.5),1.4,9.5);
+    // Intercept raised 6.4->6.7 (2026-09, "성적 계산도 조금 어렵게" pass) — the same shift in spirit
+    // as the batting-average baseline drop below: OVR now climbs faster, so the stat-to-ERA curve
+    // needed to move too, or a merely decent control stat kept producing an already-great ERA.
+    // Roughly a 10-point-of-control equivalent shift (e.g. what control 75 used to produce now
+    // takes control ≈85), same shape of curve otherwise.
+    var era=clamp(6.7-(s.control/99)*3.0-(s.breaking/99)*1.4-(s.velocity/99)*0.8-(s.mental/99)*0.5+rand(-0.4,0.5),1.4,9.5);
     var k9=clamp(4.0+(s.velocity/99)*7.2+(s.breaking/99)*3.8+rand(-0.7,0.7),3,15.5);
     var bb9=clamp(5.6-(s.control/99)*4.0-(s.mental/99)*0.5+rand(-0.4,0.5),0.7,6.8);
     var k=Math.round(ip/9*k9);
@@ -997,6 +1018,149 @@
     return null;
   }
 
+  /* ---------------- military service system ---------------- */
+  // Every KBO player is a Korean man subject to mandatory military service. There are two ways
+  // out: earn an exemption by medaling gold at a national-team tournament that carries exemption
+  // stakes (like the real Asian Games), or serve at Sangmu (a real KBO-affiliated military team —
+  // players keep playing baseball, just off their club's active roster for the duration) for 2
+  // years. Exemption must be earned — or service started — by age 28 at the latest; a player can
+  // also volunteer to serve early any time before then. Tournaments recur every 4 years to match
+  // the real Asian Games' actual cadence.
+  var MILITARY_TOURNAMENT_BASE_YEAR = 2026; // an actual Asian Games year — the 4-year cycle is anchored here
+  var MILITARY_FORCE_AGE = 28;              // must be exempt, serving, or already served by this age
+  var MILITARY_SERVICE_YEARS = 2;           // length of Sangmu service
+
+  function isMilitaryTournamentYear(year){
+    return ((year - MILITARY_TOURNAMENT_BASE_YEAR) % 4 + 4) % 4 === 0;
+  }
+  // Anchors each season to a real calendar year off the year the player actually turned pro, so
+  // the recurring tournament lines up with the real-world 4-year cycle no matter when a given
+  // save was started.
+  function militaryLeagueYear(player){
+    if(player.debutYear===undefined) return MILITARY_TOURNAMENT_BASE_YEAR;
+    return player.debutYear + (player.age - 19);
+  }
+  function militaryUnresolved(player){
+    return !player.militaryExempt && !player.militaryServed && !player.militaryServing;
+  }
+  function initMilitaryFields(player){
+    if(player.militaryExempt===undefined) player.militaryExempt=false;
+    if(player.militaryServed===undefined) player.militaryServed=false;
+    if(player.militaryServing===undefined) player.militaryServing=false;
+    if(player.militaryServiceYearsLeft===undefined) player.militaryServiceYearsLeft=0;
+    // Best-effort backfill for saves created before this feature existed — puts them on a
+    // plausible cycle rather than leaving debutYear undefined forever.
+    if(player.debutYear===undefined) player.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2;
+  }
+  function militaryTournamentName(year){
+    return year+'년 아시안게임';
+  }
+  function militaryStatusLabel(player){
+    if(player.militaryExempt) return '면제 (국제대회 금메달)';
+    if(player.militaryServing){
+      var left=player.militaryServiceYearsLeft||MILITARY_SERVICE_YEARS;
+      return '상무 복무 중 (남은 '+left+'년)';
+    }
+    if(player.militaryServed) return '군필 (상무 복무 완료)';
+    return '미해결 (만 '+MILITARY_FORCE_AGE+'세까지)';
+  }
+  // Built fresh each season and, when it fires, prepended to that season's event queue — reuses
+  // the exact same prompt/choices/resolve shape as EVENT_POOL so it runs through the same event
+  // UI with no special-cased rendering. Selection chance scales with OVR (better players are
+  // more likely to make the roster); even a selected player isn't guaranteed gold — it's a team
+  // result, not a personal stat line.
+  function buildMilitaryTournamentEvent(player){
+    if(!militaryUnresolved(player)) return null;
+    if(player.age<19 || player.age>30) return null;
+    var year=militaryLeagueYear(player);
+    if(!isMilitaryTournamentYear(year)) return null;
+    var selectChance=clamp((overall(player)-58)/50, 0.05, 0.9);
+    if(Math.random()>=selectChance) return null;
+    var name=militaryTournamentName(year);
+    return {
+      id:'military_tournament',
+      condition:function(){ return true; },
+      prompt:function(pp){ return name+' 국가대표팀 차출 제안이 왔습니다. 금메달을 따내면 병역 면제 혜택을 받습니다.'; },
+      choices:[
+        { label:'주전으로 전력을 다해 출전한다', resolve:function(pp, ctx){
+            ctx.injuryRiskDelta += 0.10;
+            var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75);
+            if(Math.random()<goldChance){
+              pp.militaryExempt=true;
+              adjustFan(pp, 20);
+              applyPermanentStatDelta(pp,'mental',3);
+              pp.highlights.push({year:pp.careerYears, text:name+'에서 금메달을 합작하며 병역 면제 혜택을 받았습니다!'});
+              return '대표팀의 핵심 전력으로 활약하며 금메달을 합작, 병역 면제 혜택을 받았습니다!';
+            }
+            adjustFan(pp, 6);
+            return '대표팀에서 최선을 다했지만 금메달 획득에는 실패했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
+          }},
+        { label:'부담을 줄이며 백업으로 참가한다', resolve:function(pp, ctx){
+            ctx.injuryRiskDelta += 0.03;
+            var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75)*0.7;
+            if(Math.random()<goldChance){
+              pp.militaryExempt=true;
+              adjustFan(pp, 16);
+              pp.highlights.push({year:pp.careerYears, text:name+'에서 금메달을 합작하며 병역 면제 혜택을 받았습니다!'});
+              return '부담 없이 대표팀에 힘을 보탰고, 팀은 금메달을 따내며 병역 면제 혜택을 받았습니다!';
+            }
+            adjustFan(pp, 3);
+            return '무리하지 않고 대표팀 일정을 소화했지만, 금메달 획득에는 실패했습니다.';
+          }}
+      ]
+    };
+  }
+  function renderMilitaryServiceStep(){
+    var p=state.player;
+    var yearsLeft=p.militaryServiceYearsLeft||MILITARY_SERVICE_YEARS;
+    var servedSoFar=MILITARY_SERVICE_YEARS-yearsLeft+1;
+    var html = '<div class="eyebrow">'+p.careerYears+'년차 · 상무 복무 '+servedSoFar+'/'+MILITARY_SERVICE_YEARS+'년차</div>'+
+      '<h2>병역 의무를 이행하고 있습니다</h2>'+
+      '<p class="lede">'+esc(p.name)+'은(는) 상무 야구단에서 복무하며 실전 감각을 유지하고 있습니다. 이 기간 동안 '+(p.team?esc(p.team.name):'소속팀')+' 경기에는 출전하지 않습니다.</p>'+
+      '<div class="btn-row"><button class="btn btn-primary" data-action="military-service-advance">다음 시즌으로</button></div>';
+    openSeasonModal(html);
+  }
+  function runMilitaryServiceSeason(){
+    state.seasonFlow={ step:'military-service', events:[], eventIndex:0, resolvedNarratives:[], ctx:{statBoost:{},injuryRiskDelta:0,lineBoost:{}}, line:null, awards:[], seasonScoreVal:0, perf:0, teamOffer:0, reason:null };
+    renderMilitaryServiceStep();
+    saveGame();
+  }
+  function finishMilitaryServiceSeason(){
+    var p=state.player;
+    closeSeasonModal();
+    p.age+=1;
+    p.careerYears+=1;
+    // Service doesn't advance FA countdown or team tenure — the player isn't accruing KBO
+    // service time while away. Salary and contract stay exactly as they were.
+    p.militaryServiceYearsLeft=(p.militaryServiceYearsLeft||MILITARY_SERVICE_YEARS)-1;
+    // A wash for growth overall: a real chance of minor rust from playing outside the top
+    // league, balanced by a small, near-guaranteed discipline/mental gain from the experience.
+    if(Math.random()<0.3){
+      var rustKey=pickAnyStat(p);
+      p.stats[rustKey]=roundClamp(p.stats[rustKey]-randInt(1,3), 10, 99);
+    }
+    applyPermanentStatDelta(p, 'mental', 1, 0.3);
+    if(p.militaryServiceYearsLeft<=0){
+      p.militaryServing=false;
+      p.militaryServed=true;
+      p.highlights.push({year:p.careerYears, text:'2년간의 상무 복무를 마치고 '+(p.team?p.team.name:'소속팀')+'으로 복귀했습니다.'});
+    }
+    pushAchievementHighlights(p, checkAchievements(p, 'career', {}), null);
+    var reason=checkForcedRetirement(p);
+    state.forcedRetireReason=reason;
+    state.seasonFlow=null;
+    state.hubTab='player';
+    if(reason){
+      p.isRetired=true;
+      state.screen='ending';
+      pushAchievementHighlights(p, checkAchievements(p, 'retire', {}), null);
+      archivePlayer(p);
+      clearSave();
+    }
+    render();
+    saveGame();
+  }
+
   // How good a season "should" look for a player of this talent level (OVR) — used so
   // a mediocre year from a star reads as underperforming, not just "fine".
   // Empirically refit against this session's actual formulas (avg/HR rebalance, the reliever
@@ -1008,16 +1172,18 @@
   // wins, while a reliever/closer's leans on saves/holds — one flat curve can't fit both.
   function expectedSeasonScore(player){
     var ovr=overall(player);
-    // Batter intercept re-derived again (2026-09): the batting-average ceiling retune above
-    // (see simulateBatterSeason's avg formula) trimmed roughly 15 points off a typical batter's
-    // seasonScoreBatter regardless of OVR — avg feeds seasonScoreBatter both directly (avg*80)
-    // and indirectly through OPS — so leaving the old intercept (97) at its Phase-4 value would
-    // have re-introduced the same systematic-negative-perf bias Phase 4 fixed the first time,
-    // just from the opposite direction (an avg formula change instead of a scoring-formula one).
-    if(player.position==='batter') return 82+(ovr-30)*2.15;
-    if(player.subrole==='선발') return 25+(ovr-30)*2.70;
-    if(player.subrole==='마무리') return 28+(ovr-30)*2.15;
-    return 26+(ovr-30)*2.05; // 불펜 (and any other relief role)
+    // Re-derived again (Phase 8, 2026-09): raising the difficulty curve (avg baseline 0.180→0.170,
+    // era intercept 6.4→6.7 — see simulateBatterSeason/simulatePitcherSeason) shifted every
+    // role's seasonScore down by a level-dependent amount, not a flat offset, so these were
+    // re-fit by linear regression against measured seasonScoreBatter/seasonScorePitcher means
+    // (200 samples/level, levels 30/45/60/75/90, all 5 stats set equal) rather than eyeballed —
+    // leaving the old Phase-7 coefficients would have reintroduced a large negative computePerf
+    // bias (up to -20 raw score, i.e. -0.4 after the /50 clamp) that skews growth/negotiation/
+    // award odds low across the board, worst for 마무리.
+    if(player.position==='batter') return 89+(ovr-30)*1.75;
+    if(player.subrole==='선발') return 19+(ovr-30)*2.66;
+    if(player.subrole==='마무리') return 12+(ovr-30)*2.17;
+    return 14+(ovr-30)*2.11; // 불펜 (and any other relief role)
   }
   function computePerf(player, seasonScoreVal){
     var delta = seasonScoreVal - expectedSeasonScore(player);
@@ -1125,6 +1291,92 @@
     return {title:'짧았던 프로 생활', hof:false};
   }
 
+  /* ---------------- achievement system ---------------- */
+  // Each achievement is checked at one of three points: 'season' right after a KBO season's
+  // line is simulated (sees that single season's box score), 'career' after every completed
+  // season including a military-service one (sees the running career totals), or 'retire' once
+  // and only when the player's career actually ends. position 'any' applies to both batters and
+  // pitchers; otherwise only the matching position is checked, since e.g. a home-run milestone
+  // is meaningless for a pitcher's stat line.
+  var ACHIEVEMENTS = [
+    { id:'rookie_300', name:'신인 3할', desc:'데뷔 시즌 타율 3할을 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line, isRookie){ return isRookie && line.avg>=0.300; } },
+    { id:'club_20_20', name:'20-20 클럽', desc:'한 시즌에 20홈런-20도루를 동시에 달성한다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.hr>=20 && line.sb>=20; } },
+    { id:'club_30_30', name:'30-30 클럽', desc:'한 시즌에 30홈런-30도루를 동시에 달성한다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.hr>=30 && line.sb>=30; } },
+    { id:'club_40_40', name:'40-40 클럽', desc:'한 시즌에 40홈런-40도루라는 전설적인 기록을 세운다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.hr>=40 && line.sb>=40; } },
+    { id:'season_hr40', name:'단일시즌 40홈런', desc:'한 시즌 40홈런을 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.hr>=40; } },
+    { id:'season_hr45', name:'단일시즌 45홈런', desc:'한 시즌 45홈런의 대기록을 세운다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.hr>=45; } },
+    { id:'season_avg350', name:'단일시즌 3할5푼', desc:'한 시즌 타율 3할5푼을 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.avg>=0.350; } },
+    { id:'career_hr300', name:'통산 300홈런', desc:'통산 300홈런을 넘긴다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.hr>=300; } },
+    { id:'career_h2000', name:'통산 2000안타', desc:'통산 2000안타를 넘긴다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.h>=2000; } },
+    { id:'career_h3000', name:'통산 3000안타', desc:'통산 3000안타의 전설적인 대기록을 세운다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.h>=3000; } },
+    { id:'season_k200', name:'단일시즌 200탈삼진', desc:'한 시즌 200탈삼진을 넘긴다.', position:'pitcher', scope:'season',
+      check:function(p, line){ return line.k>=200; } },
+    { id:'season_untouchable', name:'언터처블 시즌', desc:'100이닝 이상을 던지며 평균자책점 2.00 이하를 기록한다.', position:'pitcher', scope:'season',
+      check:function(p, line){ return line.ip>=100 && line.era<=2.00; } },
+    { id:'season_save35', name:'단일시즌 35세이브', desc:'한 시즌 35세이브를 넘긴다.', position:'pitcher', scope:'season',
+      check:function(p, line){ return line.saves>=35; } },
+    { id:'career_k2000', name:'통산 2000탈삼진', desc:'통산 2000탈삼진을 넘긴다.', position:'pitcher', scope:'career',
+      check:function(p, totals){ return totals.k>=2000; } },
+    { id:'career_w200', name:'통산 200승', desc:'통산 200승을 넘긴다.', position:'pitcher', scope:'career',
+      check:function(p, totals){ return totals.wins>=200; } },
+    { id:'career_sv300', name:'통산 300세이브', desc:'통산 300세이브를 넘긴다.', position:'pitcher', scope:'career',
+      check:function(p, totals){ return totals.saves>=300; } },
+    { id:'golden_glove5', name:'골든글러브 5회', desc:'골든글러브를 5회 이상 수상한다.', position:'any', scope:'career',
+      check:function(p){ return (p.awardsAll||[]).filter(function(a){ return a.name==='골든글러브'; }).length>=5; } },
+    { id:'mvp3', name:'MVP 3회', desc:'정규시즌 MVP를 3회 이상 수상한다.', position:'any', scope:'career',
+      check:function(p){ return (p.awardsAll||[]).filter(function(a){ return a.name==='정규시즌 MVP'; }).length>=3; } },
+    { id:'legend_title', name:'레전드 등극', desc:'커리어 등급이 레전드에 도달한다.', position:'any', scope:'career',
+      check:function(p){ return careerTitle(p).title==='레전드'; } },
+    { id:'twenty_year_vet', name:'20년 현역', desc:'프로 통산 20시즌 이상 활약한다.', position:'any', scope:'career',
+      check:function(p){ return (p.careerYears||0)>=20; } },
+    { id:'military_exempt', name:'병역 면제', desc:'국제대회 금메달로 병역 면제 혜택을 받는다.', position:'any', scope:'career',
+      check:function(p){ return !!p.militaryExempt; } },
+    { id:'military_served', name:'명예 제대', desc:'상무 복무를 마치고 팀에 복귀한다.', position:'any', scope:'career',
+      check:function(p){ return !!p.militaryServed; } },
+    { id:'one_club_man', name:'원클럽맨', desc:'은퇴할 때까지 데뷔 팀에서만 활약한다.', position:'any', scope:'retire',
+      check:function(p){ return (p.tradeCount||0)===0 && !!p.team; } }
+  ];
+  function checkAchievements(player, scope, ctx){
+    if(!player.unlockedAchievements) player.unlockedAchievements=[];
+    var newly=[];
+    ACHIEVEMENTS.forEach(function(a){
+      if(a.scope!==scope) return;
+      if(a.position!=='any' && a.position!==player.position) return;
+      if(player.unlockedAchievements.indexOf(a.id)>-1) return;
+      var unlocked;
+      if(scope==='season') unlocked = a.check(player, ctx.line, ctx.isRookie);
+      else if(scope==='career') unlocked = a.check(player, aggregateCareer(player));
+      else unlocked = a.check(player);
+      if(unlocked){
+        player.unlockedAchievements.push(a.id);
+        newly.push(a);
+      }
+    });
+    return newly;
+  }
+  // Shared formatter for a batch of newly-unlocked achievements — routed into the season
+  // report's own highlight list (hiArr) when one is in scope (so it also lands in the
+  // permanent career highlights via that list's own forEach-push), or pushed straight to the
+  // permanent career highlights otherwise (military-service and retirement flows have no
+  // report-step highlight list of their own).
+  function pushAchievementHighlights(player, list, hiArr){
+    list.forEach(function(a){
+      var text='업적 달성 — '+a.name+': '+a.desc;
+      if(hiArr) hiArr.push(text);
+      else player.highlights.push({year:player.careerYears, text:text});
+    });
+  }
+
   // Flavor tags summarizing how the player actually played — a mix of raw talent (stats
   // at retirement), career-long production, and the story of the career itself (loyalty,
   // durability, fan love). Capped so the ending screen doesn't turn into a wall of pills.
@@ -1182,6 +1434,11 @@
   // without this, that many attempts per season would keep outrunning aging decline well past
   // 33 just from sheer volume, even with a lower per-attempt success chance. Full attempts
   // through the real prime, then cut off hard so the extra budget can't drag the peak later.
+  // The ceiling a stat can reach through the GENERAL growth channel alone (finalizeSeasonEvents)
+  // when it is NOT the player's chosen growth focus. Only a dedicated single-stat focus can push
+  // a stat past this, up to 99 — this is what keeps "focus on one thing" meaningfully different
+  // from "everything drifts up together".
+  var NON_FOCUS_STAT_CAP = 85;
   function ageGrowthAttemptTaper(age){
     if(age===undefined || age===null) return 1;
     if(age<=30) return 1;
@@ -1192,13 +1449,19 @@
   // Growth gets harder to earn the closer a stat sits to its ceiling — no more free ride to 99.
   // chanceBonus lets deliberate, season-long training (a chosen growth focus) succeed more
   // reliably than a one-off event windfall, so picking a focus has a real, felt payoff.
-  function applyPermanentStatDelta(p, key, delta, chanceBonus){
+  // maxCap lets a caller cap where THIS particular growth channel can push a stat, separate
+  // from the hard 10-99 game range — used so a stat that ISN'T the player's chosen growth
+  // focus can still grow (so overall OVR keeps rising) without being able to sneak all the
+  // way up to 99 the way the focus stat can.
+  function applyPermanentStatDelta(p, key, delta, chanceBonus, maxCap){
+    var cap = (maxCap===undefined || maxCap===null) ? 99 : maxCap;
     if(delta>0){
       var current=p.stats[key];
+      if(current>=cap) return; // already at or past this channel's ceiling — no further growth from here
       var successChance=clamp(1-(current-55)/70+(chanceBonus||0)+ageGrowthBonus(p.age), 0.12, 1);
       if(Math.random()>=successChance) return; // growth attempt wasted — diminishing returns near the ceiling
     }
-    p.stats[key]=roundClamp(p.stats[key]+delta, 10, 99);
+    p.stats[key]=roundClamp(p.stats[key]+delta, 10, cap);
   }
   function pickNonMentalStat(p){
     var keys=statList(p.position).filter(function(s){ return s.key!=='mental'; }).map(function(s){ return s.key; });
@@ -2645,6 +2908,7 @@
   /* ---- hub ---- */
   function renderHub(){
     var p=state.player;
+    initMilitaryFields(p);
     var ovr=overall(p);
     var fa = (p.fanApproval===undefined||p.fanApproval===null) ? 50 : p.fanApproval;
 
@@ -2660,6 +2924,7 @@
         '<div><span>연차</span><span>프로 '+p.careerYears+'년차</span></div>'+
         '<div><span>연봉</span><span>'+fmtMoney(p.salary)+'</span></div>'+
         '<div><span>팬 여론</span><span>'+fanApprovalLabel(fa)+' ('+fa+')</span></div>'+
+        '<div><span>병역</span><span>'+militaryStatusLabel(p)+'</span></div>'+
       '</div>'+
       '<div class="stat-track" style="margin:-10px 0 18px;"><div class="stat-fill" style="width:'+fa+'%;background:linear-gradient(90deg,var(--danger),var(--accent),var(--turf));"></div></div>'+
       statList(p.position).map(function(s){
@@ -2707,6 +2972,15 @@
         '</div>'
       );
     }).join('');
+
+    if(militaryUnresolved(p) && p.age<MILITARY_FORCE_AGE){
+      html += '<p class="lede" style="font-size:13px;">병역: '+militaryStatusLabel(p)+'. 국제대회 금메달로 면제받거나, 원하는 시점에 상무에 조기 입대할 수 있습니다.</p>'+
+        '<div class="btn-row">'+
+          '<button class="btn btn-outline" data-action="military-volunteer">상무 조기 입대</button>'+
+        '</div>';
+    } else if(p.militaryServing){
+      html += '<p class="lede" style="font-size:13px;">병역: '+militaryStatusLabel(p)+'.</p>';
+    }
 
     html += '<div class="btn-row">'+
       '<button class="btn btn-primary" data-action="start-season">'+p.careerYears+'년차 시즌 시작</button>'+
@@ -2765,6 +3039,19 @@
         p.awardsAll.map(function(a){ return '<span class="award-pill">'+a.year+'년 '+a.name+'</span>'; }).join('')+
       '</div>';
     }
+
+    var unlockedIds=(p.unlockedAchievements||[]);
+    var relevantAchievements=ACHIEVEMENTS.filter(function(a){ return a.position==='any' || a.position===p.position; });
+    html += '<hr class="divider"><h3 style="font-size:17px;">업적 ('+unlockedIds.length+'/'+relevantAchievements.length+')</h3>'+
+      '<div class="achv-grid">'+
+        relevantAchievements.map(function(a){
+          var got=unlockedIds.indexOf(a.id)>-1;
+          return '<div class="achv-card '+(got?'unlocked':'locked')+'">'+
+            '<div class="achv-name">'+(got?'★':'☆')+' '+esc(a.name)+'</div>'+
+            '<div class="achv-desc">'+esc(a.desc)+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>';
 
     if(p.highlights && p.highlights.length){
       html += '<hr class="divider"><h3 style="font-size:17px;">커리어 하이라이트</h3>' +
@@ -2911,7 +3198,14 @@
   function startSeasonFlow(){
     var p=state.player;
     state.forcedRetireReason=null;
+    initMilitaryFields(p);
+    if(p.militaryServing){
+      runMilitaryServiceSeason();
+      return;
+    }
     var events=pickSeasonEvents(p);
+    var tournamentEvent=buildMilitaryTournamentEvent(p);
+    if(tournamentEvent) events=[tournamentEvent].concat(events);
     state.seasonFlow={
       step:'events', events:events, eventIndex:0, resolvedNarratives:[],
       ctx:{ statBoost:{}, injuryRiskDelta:0, lineBoost:{} },
@@ -3015,10 +3309,13 @@
     // The salary that was actually in effect during the season just played goes toward the
     // career earnings total (negotiation below only sets pay for the *next* season).
     p.totalEarnings=(p.totalEarnings||0)+(p.salary||0);
+    var newAchievements = checkAchievements(p, 'season', {line:line, isRookie:isRookie});
+    newAchievements = newAchievements.concat(checkAchievements(p, 'career', {}));
 
     sf.perf=computePerf(p, awardScore);
 
     var hi=[];
+    pushAchievementHighlights(p, newAchievements, hi);
     if(line.injury) hi.push(line.injury+'으로 시즌 중 이탈했지만 복귀해 시즌을 마쳤습니다.');
     if(awards.indexOf('정규시즌 MVP')>-1) hi.push('압도적인 활약으로 정규시즌 MVP급 시즌을 보냈습니다.');
     else if(awards.indexOf('골든글러브')>-1) hi.push('팀 내 핵심 전력으로 자리매김한 시즌이었습니다.');
@@ -3083,6 +3380,13 @@
     // "grow one thing a lot", it's "grow everything a little, AND grow one thing extra" via the
     // dedicated focusAttempts pass above. This is what actually raises OVERALL rating over a
     // career instead of just the one chosen stat.
+    // Retuned again (2026-09): giving every stat the SAME uncapped 99 ceiling through this
+    // channel overshot the other way — nearly every stat, focused or not, was landing in the
+    // 90s, which flattened the whole point of picking a focus and made builds feel identical.
+    // A growth focus is now the ONLY path to 99 in a given stat — this general channel still
+    // touches every stat (so overall OVR keeps climbing for everyone), but any stat that ISN'T
+    // the current focus is capped at NON_FOCUS_STAT_CAP through this channel specifically, so a
+    // committed specialist still reads as clearly better in their one stat than everywhere else.
     // Same raw-floor-then-taper structure as focusAttempts above, and for the same reason: the
     // channel needs a real floor during the prime (so a build reliably climbs to its 80+ OVR
     // target) WITHOUT that floor re-asserting itself after taper and guaranteeing a season
@@ -3098,7 +3402,9 @@
     var growthPointsRaw = clamp(19+sf.perf*10, 2, 24);
     var growthPoints = roundClamp(growthPointsRaw*ageTaper, 0, 24);
     for(var gi=0; gi<growthPoints; gi++){
-      applyPermanentStatDelta(p, pick(growthKeys), 1);
+      var gKey=pick(growthKeys);
+      var gCap = (focusKey && gKey!==focusKey) ? NON_FOCUS_STAT_CAP : 99;
+      applyPermanentStatDelta(p, gKey, 1, 0, gCap);
     }
     if(growthPoints>=2) hi.push('좋은 활약 덕분에 다른 능력치도 눈에 띄게 성장했습니다.');
     else if(!focusKey && growthPoints<=0 && sf.perf<-0.4) hi.push('부진한 시즌으로 이번 해는 별다른 성장이 없었습니다.');
@@ -3377,6 +3683,7 @@
       p.isRetired=true;
       state.screen='ending';
       state.seasonFlow=null;
+      pushAchievementHighlights(p, checkAchievements(p, 'retire', {}), null);
       archivePlayer(p);
       clearSave();
       render();
@@ -3387,6 +3694,15 @@
     p.teamTenureYears=(p.teamTenureYears||0)+1;
     p.yearsToFA=(p.yearsToFA===undefined?3:p.yearsToFA)-1;
     applyAgingDecline(p);
+    // Military service is mandatory by MILITARY_FORCE_AGE at the latest — if the player still
+    // hasn't earned an exemption or already served by the time they hit that age, Sangmu
+    // enlistment is forced starting next season (this season's play, awards and negotiation
+    // still stand — the season already happened before this check runs).
+    if(militaryUnresolved(p) && p.age>=MILITARY_FORCE_AGE){
+      p.militaryServing=true;
+      p.militaryServiceYearsLeft=MILITARY_SERVICE_YEARS;
+      p.highlights.push({year:p.careerYears, text:'만 '+p.age+'세가 되도록 병역 면제를 받지 못해 상무 입대가 확정되었습니다. 2년간 복무합니다.'});
+    }
     // Growth focus deliberately carries over into next season instead of resetting to null —
     // a player who just clicks straight through to the next season keeps training the same
     // stat they picked before, rather than silently falling back to balanced growth.
@@ -3428,6 +3744,7 @@
       var save=loadSave();
       if(save && save.player){
         state.player=save.player;
+        initMilitaryFields(state.player);
         state.screen = save.player.isRetired ? 'ending' : 'hub';
         state.hubTab='player';
       }
@@ -3497,6 +3814,8 @@
       p.team=randomTeam;
       p.salary=startingSalary({drafted:false});
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
+      p.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2; // anchors the military tournament cycle to a real year at debut
+      initMilitaryFields(p);
       state.screen='hub'; state.hubTab='player';
       saveGame();
     }
@@ -3506,6 +3825,8 @@
       p.draftInfo=state.draftResult;
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
       p.totalEarnings=(p.totalEarnings||0)+(state.draftResult.bonus||0);
+      p.debutYear=MILITARY_TOURNAMENT_BASE_YEAR-2; // anchors the military tournament cycle to a real year at debut
+      initMilitaryFields(p);
       state.screen='hub'; state.hubTab='player';
       saveGame();
     }
@@ -3514,6 +3835,17 @@
       p.growthFocus = el.getAttribute('data-stat') || null;
     }
     else if(action==='start-season'){ startSeasonFlow(); return; }
+    else if(action==='military-service-advance'){ finishMilitaryServiceSeason(); return; }
+    else if(action==='military-volunteer'){
+      if(!militaryUnresolved(p) || p.age>=MILITARY_FORCE_AGE) return;
+      openConfirm('상무에 조기 입대하시겠습니까? 입대 시 2년간 '+(p.team?p.team.name:'소속팀')+' 경기에 출전할 수 없습니다.', '입대하기', function(){
+        p.militaryServing=true;
+        p.militaryServiceYearsLeft=MILITARY_SERVICE_YEARS;
+        render();
+        saveGame();
+      });
+      return;
+    }
     else if(action==='event-choice'){ resolveEventChoice(parseInt(el.getAttribute('data-choice'),10)); return; }
     else if(action==='event-next'){ advanceEventStep(); return; }
     else if(action==='season-to-awards'){ state.seasonFlow.step='awards'; renderAwardsStep(); return; }
@@ -3531,6 +3863,7 @@
       openConfirm('정말로 은퇴하시겠습니까? 이번 결정은 되돌릴 수 없습니다.', '은퇴하기', function(){
         p.isRetired=true;
         state.screen='ending';
+        pushAchievementHighlights(p, checkAchievements(p, 'retire', {}), null);
         archivePlayer(p);
         clearSave();
         render();
