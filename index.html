@@ -2465,20 +2465,33 @@
     {
       id:'position_change_request',
       condition:function(p){ return p.position==='batter' && !p.isDH && p.careerYears>=3; },
-      prompt:function(p){ return '구단이 포지션 전환 테스트를 제안합니다.'; },
+      // Which position the tryout is actually FOR is decided here (once) and cached on the
+      // player object so both choices' resolve() see the exact same target the prompt named —
+      // previously the event never said which position it meant, and never actually changed
+      // p.subrole even on a "successful" tryout, so it was pure unexplained flavor text.
+      prompt:function(p){
+        var options=BATTER_SUBROLES.filter(function(s){ return s!==p.subrole; });
+        p._posChangeTarget = pick(options);
+        return '구단이 '+p.subrole+'에서 '+p._posChangeTarget+'로의 포지션 전환 테스트를 제안합니다.';
+      },
       choices:[
         { label:'새 포지션에 도전한다', resolve:function(p, ctx){
+            var target = p._posChangeTarget || pick(BATTER_SUBROLES.filter(function(s){ return s!==p.subrole; }));
+            var fromPos = p.subrole;
+            delete p._posChangeTarget;
             var chance=clamp(0.4+(p.stats.defense-50)/150,0.25,0.7);
             if(Math.random()<chance){
+              p.subrole=target;
               ctx.statBoost.defense=(ctx.statBoost.defense||0)+randInt(4,8);
-              return '새로운 포지션에 성공적으로 적응하며 활용 폭이 넓어졌습니다.';
+              return fromPos+'에서 '+target+'로 포지션 전환에 성공적으로 적응하며 새 자리를 꿰찼습니다.';
             }
             ctx.injuryRiskDelta += 0.05;
             ctx.statBoost.defense=(ctx.statBoost.defense||0)-3;
-            return '낯선 포지션 적응에 애를 먹으며 수비에서 어려움을 겪었습니다.';
+            return target+' 전환에 도전했지만 낯선 자리 적응에 애를 먹으며 수비에서 어려움을 겪었고, 결국 '+fromPos+' 자리를 지키기로 했습니다.';
           }},
         { label:'기존 포지션을 지킨다', resolve:function(p, ctx){
-            return '익숙한 자리를 지키며 안정적으로 시즌을 이어갔습니다.';
+            delete p._posChangeTarget;
+            return '익숙한 '+p.subrole+' 자리를 지키며 안정적으로 시즌을 이어갔습니다.';
           }}
       ]
     },
@@ -3538,6 +3551,22 @@
     var raw=Math.round(ceiling*rand(0.7,1.5)*popularityBoost);
     return clamp(raw, 2700, Math.round(ceiling*1.6));
   }
+  // The incumbent club's FA retention offer, anchored the same way a rival's bid is — to the
+  // player's real current market value (salaryCeiling) — rather than to their old salary the way
+  // a routine yearly raise (teamOfferSalary) is. A player's OVR (and so their true ceiling) can
+  // grow much faster than their negotiated salary ever caught up to across the 3 years leading
+  // into FA — a normal outcome of this game's growth system, not an edge case — so anchoring the
+  // "stay" offer to that stale old salary could leave it a fraction of what a rival's
+  // ceiling-anchored bid came out to (e.g. an 80만원 stay offer next to an 11억원 rival bid): two
+  // numbers that were never really comparable, even though the whole point of an FA screen is to
+  // let the player weigh them against each other. The incumbent's range (0.75-1.05x) is narrower
+  // and centered lower than a rival's open-market range (0.7-1.5x) — they're not trying to win a
+  // bidding war, just retain — and renderFAStep layers its own loyalty bonus on top of this.
+  function teamFAStayOffer(player){
+    var ceiling=salaryCeiling(player);
+    var popularityBoost=1+((player.fanApproval||50)-50)/400;
+    return Math.round(ceiling*rand(0.75,1.05)*popularityBoost);
+  }
 
   // Every 3 years (yearsToFA counts down to 0 in finishSeasonFlow) the player hits free agency
   // instead of a normal one-team negotiation: their own club gets a loyalty-boosted retention
@@ -3545,7 +3574,7 @@
   // competing bids — the player picks who to sign with.
   function renderFAStep(){
     var sf=state.seasonFlow, p=state.player;
-    var baseOffer=teamOfferSalary(p, sf.perf);
+    var baseOffer=teamFAStayOffer(p);
     var loyaltyBonus=clamp((p.teamTenureYears||0)*0.012, 0, 0.10);
     var stayOffer=capSalaryOffer(p, baseOffer*(1+loyaltyBonus));
     var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p)}; });
