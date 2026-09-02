@@ -1083,22 +1083,57 @@
 
   /* ---------------- military service system ---------------- */
   // Every KBO player is a Korean man subject to mandatory military service. There are two ways
-  // out: earn an exemption by medaling gold at a national-team tournament that carries exemption
-  // stakes (like the real Asian Games), or serve at Sangmu (a real KBO-affiliated military team —
-  // players keep playing baseball, just off their club's active roster for the duration) for 2
-  // years. Exemption must be earned — or service started — by age 28 at the latest; a player can
-  // also volunteer to serve early any time before then. Tournaments recur every 4 years to match
-  // the real Asian Games' actual cadence.
+  // out: earn an exemption by medaling at a national-team tournament that actually carries
+  // exemption stakes, or serve at Sangmu (a real KBO-affiliated military team — players keep
+  // playing baseball, just off their club's active roster for the duration) for 2 years.
+  // Exemption must be earned — or service started — by age 28 at the latest; a player can also
+  // volunteer to serve early any time before then.
+  //
+  // Which tournaments actually grant this (2026-09, "다른 대회들도" pass): as of the real 병무청
+  // (Military Manpower Administration) 예술체육요원 rules — narrowed 2020-06-30 and unchanged
+  // since — only two carry exemption stakes for athletes: 올림픽 (medal, any of top 3) and
+  // 아시안게임 (gold only). Everything that used to also qualify (WBC, world championships,
+  // Universiade, Asian Championships, World Cup football, etc.) was removed from the list in that
+  // 2020 rule change, so this game only models the two that still actually apply. They're modeled
+  // as two independent tracks rather than one, since they behave differently in practice:
+  //  - 아시안게임: guaranteed every 4 years (baseball is a fixture there), gold-only.
+  //  - 올림픽: baseball isn't a permanent Olympic sport (dropped after 2008, one-off return for
+  //    Tokyo 2020, absent from Paris 2024, confirmed back for LA 2028) — modeled as appearing
+  //    roughly every OTHER Olympics (an 8-year cycle) to capture that real unpredictability,
+  //    but with the real, more forgiving "any medal" bar instead of gold-only.
   var MILITARY_TOURNAMENT_BASE_YEAR = 2026; // an actual Asian Games year — the 4-year cycle is anchored here
+  var OLYMPIC_BASEBALL_BASE_YEAR = 2028;    // LA 2028, confirmed to include baseball
+  var OLYMPIC_BASEBALL_CYCLE = 8;           // baseball isn't in every Olympics — roughly every other one
   var MILITARY_FORCE_AGE = 28;              // must be exempt, serving, or already served by this age
   var MILITARY_SERVICE_YEARS = 2;           // length of Sangmu service
 
   function isMilitaryTournamentYear(year){
     return ((year - MILITARY_TOURNAMENT_BASE_YEAR) % 4 + 4) % 4 === 0;
   }
+  function isOlympicBaseballYear(year){
+    return ((year - OLYMPIC_BASEBALL_BASE_YEAR) % OLYMPIC_BASEBALL_CYCLE + OLYMPIC_BASEBALL_CYCLE) % OLYMPIC_BASEBALL_CYCLE === 0;
+  }
+  // The two tracks can mathematically never land on the same year: Asian Games years are
+  // ≡2 (mod 4) off this base, Olympic-baseball years are ≡4 (mod 8) — which is ≡0 (mod 4) — so
+  // the two residues (2 vs 0, mod 4) can never match. A player is never asked to choose between
+  // both in the same season.
+  var MILITARY_TOURNAMENTS = [
+    { key:'asiad', name:function(year){ return year+'년 아시안게임'; }, isYear:isMilitaryTournamentYear,
+      medalWord:'금메달', medalDesc:'금메달',
+      selectChance:function(ovr){ return clamp((ovr-58)/50, 0.05, 0.9); },
+      medalChance:function(ovr){ return clamp(0.30+(ovr-60)/140, 0.10, 0.75); } },
+    // Olympic baseball rosters skew toward a team's most established players (fewer, higher-
+    // stakes roster spots than the Asian Games squad usually gets), so selection is a little
+    // harder to crack at the same OVR — but "any medal" (not gold-only) makes actually winning
+    // one once selected meaningfully more forgiving than the Asian Games' gold-or-nothing bar.
+    { key:'olympic', name:function(year){ return year+'년 올림픽'; }, isYear:isOlympicBaseballYear,
+      medalWord:'메달', medalDesc:'메달(동메달 이상)',
+      selectChance:function(ovr){ return clamp((ovr-62)/48, 0.04, 0.85); },
+      medalChance:function(ovr){ return clamp(0.55+(ovr-60)/160, 0.25, 0.90); } }
+  ];
   // Anchors each season to a real calendar year off the year the player actually turned pro, so
-  // the recurring tournament lines up with the real-world 4-year cycle no matter when a given
-  // save was started.
+  // the recurring tournaments line up with their real-world cycles no matter when a given save
+  // was started.
   function militaryLeagueYear(player){
     if(player.debutYear===undefined) return MILITARY_TOURNAMENT_BASE_YEAR;
     return player.debutYear + (player.age - 19);
@@ -1106,13 +1141,14 @@
   function militaryUnresolved(player){
     return !player.militaryExempt && !player.militaryServed && !player.militaryServing;
   }
-  // The random offset here (0-3 years) is what makes some careers get 3 shots at the tournament
-  // before the age-28 deadline and others only 2 — a fixed debut year would put EVERY player on
-  // the exact same 4-year phase, so everyone would always get the same count. With age 19-28 (a
-  // 10-year window) against a 4-year cycle, a 0 or 1 year offset lines up 3 tournament years
-  // inside that window; a 2 or 3 year offset only fits 2 — "some are just unlucky with the
+  // The random offset here (0-3 years) is what makes some careers get 3 shots at the Asian Games
+  // tournament before the age-28 deadline and others only 2 — a fixed debut year would put EVERY
+  // player on the exact same 4-year phase, so everyone would always get the same count. With age
+  // 19-28 (a 10-year window) against a 4-year cycle, a 0 or 1 year offset lines up 3 tournament
+  // years inside that window; a 2 or 3 year offset only fits 2 — "some are just unlucky with the
   // timing," same as a real player's draft year landing awkwardly relative to the real Asian
-  // Games calendar.
+  // Games calendar. The same offset also determines Olympic-baseball alignment (1-2 chances
+  // depending on phase, since it's an 8-year cycle against the same 10-year window).
   function rollMilitaryDebutYear(){
     return MILITARY_TOURNAMENT_BASE_YEAR - randInt(0,3);
   }
@@ -1121,22 +1157,30 @@
     if(player.militaryServed===undefined) player.militaryServed=false;
     if(player.militaryServing===undefined) player.militaryServing=false;
     if(player.militaryServiceYearsLeft===undefined) player.militaryServiceYearsLeft=0;
+    if(player.nationalTeamCallups===undefined) player.nationalTeamCallups=0;
     // Best-effort backfill for saves created before this feature existed — puts them on a
     // random plausible cycle rather than leaving debutYear undefined forever.
     if(player.debutYear===undefined) player.debutYear=rollMilitaryDebutYear();
   }
-  function militaryTournamentName(year){
-    return year+'년 아시안게임';
-  }
-  // How many seasons remain until the next tournament year (0 if this season IS one), and what
-  // year/name that tournament is — used for the "D-N년" countdown shown while unresolved.
+  // How many seasons remain until the SOONER of the two tracks' next tournament year (0 if this
+  // season IS one), and what year/name/track that tournament is — used for the "D-N년" countdown
+  // shown while unresolved. Always picks whichever track comes first, not just the Asian Games.
   function nextMilitaryTournamentInfo(player){
-    var year=militaryLeagueYear(player);
-    while(!isMilitaryTournamentYear(year)) year++;
-    return { year:year, yearsLeft:year-militaryLeagueYear(player), name:militaryTournamentName(year) };
+    var leagueYear=militaryLeagueYear(player);
+    var best=null;
+    MILITARY_TOURNAMENTS.forEach(function(t){
+      var year=leagueYear;
+      while(!t.isYear(year)) year++;
+      var yearsLeft=year-leagueYear;
+      if(!best || yearsLeft<best.yearsLeft){ best={year:year, yearsLeft:yearsLeft, name:t.name(year), key:t.key}; }
+    });
+    return best;
   }
   function militaryStatusLabel(player){
-    if(player.militaryExempt) return '면제 (국제대회 금메달)';
+    if(player.militaryExempt){
+      var src=player.militaryExemptSource==='olympic' ? '올림픽 메달' : (player.militaryExemptSource==='asiad' ? '아시안게임 금메달' : '국제대회 메달');
+      return '면제 ('+src+')';
+    }
     if(player.militaryServing){
       var left=player.militaryServiceYearsLeft||MILITARY_SERVICE_YEARS;
       return '상무 복무 중 (남은 '+left+'년)';
@@ -1152,19 +1196,22 @@
   // Built fresh each season and, when it fires, prepended to that season's event queue — reuses
   // the exact same prompt/choices/resolve shape as EVENT_POOL so it runs through the same event
   // UI with no special-cased rendering. Selection chance scales with OVR (better players are
-  // more likely to make the roster); even a selected player isn't guaranteed gold — it's a team
-  // result, not a personal stat line. When a tournament year comes around but the roll says the
-  // player wasn't selected, that's surfaced as its own short notice instead of just silently
+  // more likely to make the roster); even a selected player isn't guaranteed a medal — it's a
+  // team result, not a personal stat line. When a tournament year comes around but the roll says
+  // the player wasn't selected, that's surfaced as its own short notice instead of just silently
   // doing nothing — otherwise a tournament year could pass with zero visible acknowledgment that
   // it even happened, and the player would have no way to tell "not selected" apart from "not a
-  // tournament year at all".
+  // tournament year at all". Checks both tracks for the current year — they can never both be
+  // true in the same season (see the MILITARY_TOURNAMENTS comment above), so there's never a
+  // choice between them.
   function buildMilitaryTournamentEvent(player){
     if(!militaryUnresolved(player)) return null;
     if(player.age<19 || player.age>30) return null;
     var year=militaryLeagueYear(player);
-    if(!isMilitaryTournamentYear(year)) return null;
-    var name=militaryTournamentName(year);
-    var selectChance=clamp((overall(player)-58)/50, 0.05, 0.9);
+    var tour=MILITARY_TOURNAMENTS.filter(function(t){ return t.isYear(year); })[0];
+    if(!tour) return null;
+    var name=tour.name(year);
+    var selectChance=tour.selectChance(overall(player));
     if(Math.random()>=selectChance){
       return {
         id:'military_tournament_missed',
@@ -1177,35 +1224,41 @@
         ]
       };
     }
+    // Being named to the roster is itself the "태극마크" moment regardless of what the player
+    // then chooses to do about it (go hard, hold back, or even decline) — counted here, once
+    // per selection, rather than only on the choices that actually result in participating.
+    player.nationalTeamCallups=(player.nationalTeamCallups||0)+1;
     return {
       id:'military_tournament',
       condition:function(){ return true; },
-      prompt:function(pp){ return name+' 국가대표팀에 선발되었습니다. 참가해서 금메달을 따내면 병역 면제 혜택을 받습니다. 참가하시겠습니까?'; },
+      prompt:function(pp){ return name+' 국가대표팀에 선발되었습니다. 참가해서 '+tour.medalDesc+'을 따내면 병역 면제 혜택을 받습니다. 참가하시겠습니까?'; },
       choices:[
         { label:'참가한다 — 주전으로 전력을 다해 출전', resolve:function(pp, ctx){
             ctx.injuryRiskDelta += 0.10;
-            var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75);
-            if(Math.random()<goldChance){
+            var medalChance=tour.medalChance(overall(pp));
+            if(Math.random()<medalChance){
               pp.militaryExempt=true;
+              pp.militaryExemptSource=tour.key;
               adjustFan(pp, 20);
               applyPermanentStatDelta(pp,'mental',3);
-              pp.highlights.push({year:pp.careerYears, text:name+'에서 금메달을 합작하며 병역 면제 혜택을 받았습니다!'});
-              return '대표팀의 핵심 전력으로 활약하며 금메달을 합작, 병역 면제 혜택을 받았습니다!';
+              pp.highlights.push({year:pp.careerYears, text:name+'에서 '+tour.medalWord+'을 합작하며 병역 면제 혜택을 받았습니다!'});
+              return '대표팀의 핵심 전력으로 활약하며 '+tour.medalWord+'을 합작, 병역 면제 혜택을 받았습니다!';
             }
             adjustFan(pp, 6);
-            return '대표팀에서 최선을 다했지만 금메달 획득에는 실패했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
+            return '대표팀에서 최선을 다했지만 '+tour.medalWord+' 획득에는 실패했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
           }},
         { label:'참가한다 — 부담을 줄이며 백업으로', resolve:function(pp, ctx){
             ctx.injuryRiskDelta += 0.03;
-            var goldChance=clamp(0.30+(overall(pp)-60)/140, 0.10, 0.75)*0.7;
-            if(Math.random()<goldChance){
+            var medalChance2=tour.medalChance(overall(pp))*0.7;
+            if(Math.random()<medalChance2){
               pp.militaryExempt=true;
+              pp.militaryExemptSource=tour.key;
               adjustFan(pp, 16);
-              pp.highlights.push({year:pp.careerYears, text:name+'에서 금메달을 합작하며 병역 면제 혜택을 받았습니다!'});
-              return '부담 없이 대표팀에 힘을 보탰고, 팀은 금메달을 따내며 병역 면제 혜택을 받았습니다!';
+              pp.highlights.push({year:pp.careerYears, text:name+'에서 '+tour.medalWord+'을 합작하며 병역 면제 혜택을 받았습니다!'});
+              return '부담 없이 대표팀에 힘을 보탰고, 팀은 '+tour.medalWord+'을 따내며 병역 면제 혜택을 받았습니다!';
             }
             adjustFan(pp, 3);
-            return '무리하지 않고 대표팀 일정을 소화했지만, 금메달 획득에는 실패했습니다.';
+            return '무리하지 않고 대표팀 일정을 소화했지만, '+tour.medalWord+' 획득에는 실패했습니다.';
           }},
         { label:'고사한다 — 이번엔 대표팀에 합류하지 않는다', resolve:function(pp, ctx){
             return '몸 상태 관리를 이유로 이번 '+name+' 대표팀 합류를 고사했습니다. 병역 면제 기회는 다음 대회로 미뤄졌습니다.';
@@ -1442,12 +1495,45 @@
       check:function(p){ return careerTitle(p).title==='레전드'; } },
     { id:'twenty_year_vet', name:'20년 현역', desc:'프로 통산 20시즌 이상 활약한다.', position:'any', scope:'career',
       check:function(p){ return (p.careerYears||0)>=20; } },
-    { id:'military_exempt', name:'병역 면제', desc:'국제대회 금메달로 병역 면제 혜택을 받는다.', position:'any', scope:'career',
+    { id:'military_exempt', name:'병역 면제', desc:'아시안게임 금메달이나 올림픽 메달로 병역 면제 혜택을 받는다.', position:'any', scope:'career',
       check:function(p){ return !!p.militaryExempt; } },
     { id:'military_served', name:'명예 제대', desc:'상무 복무를 마치고 팀에 복귀한다.', position:'any', scope:'career',
       check:function(p){ return !!p.militaryServed; } },
+    { id:'national_team2', name:'태극마크 2회', desc:'국가대표팀에 2회 이상 선발된다.', position:'any', scope:'career',
+      check:function(p){ return (p.nationalTeamCallups||0)>=2; } },
     { id:'one_club_man', name:'원클럽맨', desc:'은퇴할 때까지 데뷔 팀에서만 활약한다.', position:'any', scope:'retire',
-      check:function(p){ return (p.tradeCount||0)===0 && !!p.team; } }
+      check:function(p){ return (p.tradeCount||0)===0 && !!p.team; } },
+    { id:'journeyman_path', name:'저니맨의 여정', desc:'커리어 동안 3회 이상 트레이드된다.', position:'any', scope:'career',
+      check:function(p){ return (p.tradeCount||0)>=3; } },
+    { id:'rich_player', name:'몸값의 정점', desc:'통산 총수입 350억을 넘긴다.', position:'any', scope:'career',
+      check:function(p){ return (p.totalEarnings||0)>=3500000; } },
+    { id:'dh_convert', name:'지명타자 변신', desc:'수비 부담을 덜고 지명타자로 전향해 커리어를 마친다.', position:'batter', scope:'retire',
+      check:function(p){ return !!p.isDH; } },
+    // --- 2026-09, "업적 많이" 추가분 ---
+    { id:'season_h200', name:'단일시즌 200안타', desc:'한 시즌 200안타를 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.h>=200; } },
+    { id:'season_sb50', name:'단일시즌 50도루', desc:'한 시즌 50도루를 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.sb>=50; } },
+    { id:'season_rbi150', name:'단일시즌 150타점', desc:'한 시즌 150타점을 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.rbi>=150; } },
+    { id:'season_ops1000', name:'OPS 1.000 시즌', desc:'한 시즌 OPS 1.000을 넘긴다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.ops>=1.000; } },
+    { id:'season_complete', name:'컴플리트 시즌', desc:'한 시즌에 타율 3할2푼-35홈런-110타점을 동시에 달성한다.', position:'batter', scope:'season',
+      check:function(p, line){ return line.avg>=0.320 && line.hr>=35 && line.rbi>=110; } },
+    { id:'career_hr500', name:'통산 500홈런', desc:'통산 500홈런의 전설적인 대기록을 세운다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.hr>=500; } },
+    { id:'career_sb500', name:'통산 500도루', desc:'통산 500도루의 전설적인 대기록을 세운다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.sb>=500; } },
+    { id:'career_avg320', name:'통산 3할2푼 타자', desc:'통산 3000타수 이상을 채우고 통산 타율 3할2푼을 넘긴다.', position:'batter', scope:'career',
+      check:function(p, totals){ return totals.ab>=3000 && totals.avg>=0.320; } },
+    { id:'season_w18', name:'단일시즌 18승', desc:'한 시즌 18승을 넘기며 리그 정상급 다승 투수가 된다.', position:'pitcher', scope:'season',
+      check:function(p, line){ return line.wins>=18; } },
+    { id:'season_holds35', name:'단일시즌 35홀드', desc:'한 시즌 35홀드를 넘긴다.', position:'pitcher', scope:'season',
+      check:function(p, line){ return (line.holds||0)>=35; } },
+    { id:'career_holds250', name:'통산 250홀드', desc:'통산 250홀드를 넘긴다.', position:'pitcher', scope:'career',
+      check:function(p, totals){ return totals.holds>=250; } },
+    { id:'career_ip3500', name:'통산 3500이닝', desc:'통산 3500이닝을 소화한 이닝 이터가 된다.', position:'pitcher', scope:'career',
+      check:function(p, totals){ return totals.ip>=3500; } }
   ];
   function checkAchievements(player, scope, ctx){
     if(!player.unlockedAchievements) player.unlockedAchievements=[];
@@ -2770,6 +2856,453 @@
             return '개인 기록보다 안전하게 팀 플레이를 우선했습니다.';
           }}
       ]
+    },
+    // --- 2026-09, "이벤트 많이" 추가분: 새로운 성장/플레이버 이벤트 ---
+    {
+      id:'position_battle',
+      condition:function(p){ return p.careerYears<=3; },
+      prompt:function(p){ return '스프링캠프에서 주전 자리를 둘러싼 경쟁이 벌어졌습니다.'; },
+      choices:[
+        { label:'적극적으로 부딪히며 경쟁한다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(4,8);
+            ctx.injuryRiskDelta += 0.06;
+            if(Math.random()<0.5){ adjustFan(p, 4); return '치열한 경쟁 끝에 주전 자리를 따내며 자신감을 얻었습니다.'; }
+            return '경쟁에서 밀렸지만 몸으로 부딪힌 훈련은 실력으로 남았습니다.';
+          }},
+        { label:'묵묵히 준비하며 기회를 기다린다', resolve:function(p, ctx){
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+3;
+            return '조급해하지 않고 꾸준히 준비하며 기회를 기다렸습니다.';
+          }},
+        { label:'선배에게 조언을 구한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',1,0.2);
+            adjustFan(p, 1);
+            return '선배의 조언을 새겨들으며 한 뼘 더 성장했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'overseas_showcase',
+      condition:function(p){ return overall(p)>=65; },
+      prompt:function(p){ return '해외 스카우트들이 경기장을 찾아 플레이를 지켜보고 있다는 소식이 전해졌습니다.'; },
+      choices:[
+        { label:'해외 진출을 염두에 두고 적극 어필한다', resolve:function(p, ctx){
+            adjustFan(p, 8);
+            ctx.injuryRiskDelta += 0.05;
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            return '스카우트 앞에서 어필하려는 의욕이 앞서며 부담도 함께 커졌지만, 이름값은 확실히 높아졌습니다.';
+          }},
+        { label:'평소처럼 국내 커리어에 집중한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            applyPermanentStatDelta(p,'mental',1,0.15);
+            return '외부 시선에 흔들리지 않고 평소 페이스를 유지했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'incentive_clause_chase',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '에이전트가 이번 시즌 목표 성적을 달성하면 인센티브를 받는 조항을 제안합니다.'; },
+      choices:[
+        { label:'인센티브 목표를 향해 페이스를 끌어올린다', resolve:function(p, ctx){
+            var key=pickNonMentalStat(p);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(3,7);
+            ctx.injuryRiskDelta += 0.07;
+            if(Math.random()<0.45){
+              var bonus=randInt(800,2000);
+              p.totalEarnings=(p.totalEarnings||0)+bonus;
+              return '목표 성적을 달성하며 인센티브 '+fmtMoney(bonus)+'을 추가로 받았습니다!';
+            }
+            return '목표에는 닿지 못했지만 페이스를 끌어올린 경험은 값진 자산이 되었습니다.';
+          }},
+        { label:'무리하지 않고 시즌을 치른다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.02;
+            return '인센티브에 연연하지 않고 부상 없이 시즌을 치르는 데 집중했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'bat_flip_controversy',
+      condition:function(p){ return p.position==='batter' && p.careerYears>=1; },
+      prompt:function(p){ return '결정적인 홈런 뒤 화려한 배트 플립 세리머니를 했다가 상대팀의 반발을 샀습니다.'; },
+      choices:[
+        { label:'당당하게 밀어붙인다', resolve:function(p, ctx){
+            adjustFan(p, 7);
+            ctx.injuryRiskDelta += 0.05;
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            return '화끈한 세리머니가 화제를 모았지만, 다음 타석부터 상대 투수들의 견제가 매서워졌습니다.';
+          }},
+        { label:'정중히 사과한다', resolve:function(p, ctx){
+            adjustFan(p, 2);
+            applyPermanentStatDelta(p,'mental',1,0.15);
+            return '정중한 사과로 논란을 빠르게 가라앉히며 프로다운 모습을 보였습니다.';
+          }}
+      ]
+    },
+    {
+      id:'pitch_tipping_leak',
+      condition:function(p){ return p.position==='pitcher' && p.careerYears>=2; },
+      prompt:function(p){ return '상대 팀 전력분석원이 투구 패턴(팁핑)을 간파했다는 소문이 돌고 있습니다.'; },
+      choices:[
+        { label:'그립과 셋업을 새로 다듬는다', resolve:function(p, ctx){
+            var chance=clamp(0.3+(p.stats.mental-50)/150,0.15,0.6);
+            if(Math.random()<chance){
+              applyPermanentStatDelta(p,'breaking',randInt(2,5),0.2);
+              return '문제를 정확히 짚어내 셋업을 고친 것이 통하며 오히려 구종이 더 날카로워졌습니다.';
+            }
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(2,5);
+            return '고치는 과정에서 밸런스가 잠시 흔들리며 다소 고전했습니다.';
+          }},
+        { label:'기존 패턴을 밀어붙인다', resolve:function(p, ctx){
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(3,7);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(1,3);
+            return '패턴을 읽힌 채로 밀어붙이며 예상보다 고전하는 경기가 늘었습니다.';
+          }}
+      ]
+    },
+    {
+      id:'legacy_number_handoff',
+      condition:function(p){ return p.careerYears>=5; },
+      prompt:function(p){ return '은퇴를 앞둔 팀 선배가 자신이 달아온 등번호를 물려주겠다고 제안합니다.'; },
+      choices:[
+        { label:'번호를 이어받는다', resolve:function(p, ctx){
+            adjustFan(p, 6);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+3;
+            return '선배의 번호를 이어받으며 그 무게만큼 각오를 다졌습니다.';
+          }},
+        { label:'정중히 사양한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',1,0.15);
+            return '부담을 느껴 정중히 사양했지만, 선배의 마음만은 깊이 새겼습니다.';
+          }}
+      ]
+    },
+    {
+      id:'rule_change_adaptation',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '새 시즌을 앞두고 KBO가 피치클록과 확대된 자동 판정 시스템을 새로 도입했습니다.'; },
+      choices:[
+        { label:'적극적으로 새 규정에 맞춰 준비한다', resolve:function(p, ctx){
+            var key = p.position==='pitcher' ? 'control' : 'contact';
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(2,5);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+1;
+            return '새 규정에 발 빠르게 적응하며 오히려 득을 봤습니다.';
+          }},
+        { label:'기존 스타일을 고수한다', resolve:function(p, ctx){
+            if(Math.random()<0.4){
+              ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+              return '새 규정에 적응하지 못해 페이스가 조금 흔들렸습니다.';
+            }
+            return '큰 변화 없이 무난하게 새 규정에 적응했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'hometown_homecoming',
+      condition:function(p){ return p.careerYears>=1; },
+      prompt:function(p){ return '고향에서 열리는 경기, 가족과 친구들이 관중석을 가득 채웠습니다.'; },
+      choices:[
+        { label:'부담을 이겨내고 각오를 다진다', resolve:function(p, ctx){
+            var success=Math.random()<clamp(0.45+(p.stats.mental-50)/200,0.3,0.7);
+            if(success){
+              adjustFan(p, 8);
+              statList(p.position).forEach(function(s){ ctx.statBoost[s.key]=(ctx.statBoost[s.key]||0)+2; });
+              return '가족과 친구들 앞에서 최고의 활약을 펼치며 뜨거운 박수를 받았습니다!';
+            }
+            adjustFan(p, -2);
+            return '가족들 앞이라는 부담감에 평소만큼의 활약을 보이지 못했습니다.';
+          }},
+        { label:'평소처럼 편안하게 임한다', resolve:function(p, ctx){
+            adjustFan(p, 3);
+            return '특별한 날이지만 평소와 다름없이 담담하게 경기에 임했습니다.';
+          }}
+      ]
+    },
+    {
+      id:'superstition_ritual',
+      condition:function(p){ return true; },
+      prompt:function(p){ return '동료가 슬럼프를 피하는 독특한 징크스와 루틴을 함께 해보자고 권합니다.'; },
+      choices:[
+        { label:'새로운 루틴을 시작해본다', resolve:function(p, ctx){
+            if(Math.random()<0.4){
+              applyPermanentStatDelta(p,'mental',1,0.25);
+              return '플라시보든 뭐든, 새 루틴 덕분인지 한결 편안한 마음으로 시즌을 치렀습니다.';
+            }
+            return '별다른 효과는 없었지만 동료와의 유대감은 깊어졌습니다.';
+          }},
+        { label:'그냥 하던 대로 한다', resolve:function(p, ctx){
+            return '평소 하던 대로 담담하게 시즌을 이어갔습니다.';
+          }}
+      ]
+    },
+    {
+      id:'trash_talk_rivalry',
+      condition:function(p){ return p.careerYears>=2; },
+      prompt:function(p){ return '라이벌 팀 선수와의 신경전이 SNS에서 화제가 되며 두 선수의 맞대결에 관심이 쏠리고 있습니다.'; },
+      choices:[
+        { label:'맞받아치며 자신감을 드러낸다', resolve:function(p, ctx){
+            adjustFan(p, 6);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+3;
+            if(Math.random()<0.3){ ctx.statBoost.mental=(ctx.statBoost.mental||0)-5; adjustFan(p,-4); return '자신감 있게 맞받아쳤지만 정작 맞대결에서는 압박감에 시달렸습니다.'; }
+            return '당당한 맞대결 선언이 화제를 모으며 팬들의 기대감을 키웠습니다.';
+          }},
+        { label:'무시하고 실력으로 답한다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',1,0.2);
+            adjustFan(p, 2);
+            return '말싸움 대신 묵묵히 실력으로 답하겠다는 태도가 좋은 평가를 받았습니다.';
+          }}
+      ]
+    },
+    // --- 2026-09, "망캐가 될 수 있는 이벤트" 추가분: 특정 능력치를 의도적으로 방치한 "망캐"
+    // 빌드가 실제로 눈에 띄는 불이익을 겪도록 하는 이벤트들. 각각 (1) 이번 시즌 성적에 실제
+    // 타격을 주는 lineBoost, (2) 방치를 선택하면 되돌릴 수 없는 영구 능력치 하락
+    // (applyPermanentStatDelta의 음수 델타는 성공확률 없이 항상 적용됨), (3) 팬 지지도 급락,
+    // 최악의 선택지에는 (4) 실제 강제 트레이드까지 이어질 확률을 반영해, "그냥 두면 아무 일도
+    // 없다"가 아니라 방치가 실제로 커리어에 눈에 보이는 대가를 치르게 만든다.
+    {
+      id:'mental_meltdown',
+      condition:function(p){ return p.stats.mental<35; },
+      prompt:function(p){ return '중요한 순간마다 흔들리는 멘탈이 도마 위에 올랐습니다. 언론은 벌써 "유리 멘탈"이라는 딱지를 붙이기 시작했습니다.'; },
+      choices:[
+        { label:'홀로 이겨내려 근성으로 버틴다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',-randInt(2,5));
+            adjustFan(p, -9);
+            return '근성만으로 버티려 했지만 같은 실수가 반복되며 멘탈이 더 흔들렸습니다.';
+          }},
+        { label:'스포츠 심리 상담을 받는다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.02;
+            adjustFan(p, -3);
+            applyPermanentStatDelta(p,'mental',1,0.3);
+            return '적극적으로 도움을 받으며 조금씩 흔들림을 다잡아갔습니다.';
+          }},
+        { label:'괜찮은 척 넘어간다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'mental',-randInt(4,7));
+            adjustFan(p, -14);
+            if(Math.random()<0.35){
+              var nt=performTrade(p, '반복된 멘탈 붕괴로 구단의 신뢰를 완전히 잃은 끝에');
+              return '문제를 외면한 대가로 결국 '+nt.name+'로 트레이드되었습니다.';
+            }
+            return '문제를 외면했지만 불안은 가시지 않았고, 팀 내 신뢰만 더 깎였습니다.';
+          }}
+      ]
+    },
+    {
+      id:'fielding_collapse_scandal',
+      condition:function(p){ return p.position==='batter' && !p.isDH && p.stats.defense<35; },
+      prompt:function(p){ return '시즌 중 반복된 실책이 결정적인 실점으로 이어지며 "수비가 안 되는 선수"라는 비판이 쏟아지고 있습니다.'; },
+      choices:[
+        { label:'수비 훈련에 매달린다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.05;
+            applyPermanentStatDelta(p,'defense',randInt(2,4),0.15);
+            adjustFan(p, -3);
+            return '기초부터 다시 다지는 수비 훈련에 매달리며 조금씩 안정을 찾아갔습니다.';
+          }},
+        { label:'수비는 포기하고 타격에만 집중한다', resolve:function(p, ctx){
+            ctx.lineBoost.errors=(ctx.lineBoost.errors||0)+randInt(3,6);
+            applyPermanentStatDelta(p,'defense',-randInt(2,4));
+            adjustFan(p, -11);
+            return '수비를 사실상 포기하자 실책이 눈에 띄게 늘며 팬들의 비판이 거세졌습니다.';
+          }},
+        { label:'그냥 넘어간다', resolve:function(p, ctx){
+            ctx.lineBoost.errors=(ctx.lineBoost.errors||0)+randInt(1,3);
+            adjustFan(p, -7);
+            if(Math.random()<0.3){
+              var nt2=performTrade(p, '거듭된 수비 불안 끝에');
+              return '결국 구단이 인내심을 잃고 '+nt2.name+'로 트레이드했습니다.';
+            }
+            return '별다른 대책 없이 넘어갔지만 실책에 대한 시선은 계속 따가웠습니다.';
+          }}
+      ]
+    },
+    {
+      id:'baserunning_blunder_streak',
+      condition:function(p){ return p.position==='batter' && p.stats.speed<30; },
+      prompt:function(p){ return '결정적인 순간 어이없는 주루사가 반복되며 감독의 신뢰를 잃고 있습니다.'; },
+      choices:[
+        { label:'적극적으로 뛰며 만회하려 한다', resolve:function(p, ctx){
+            var chance=clamp((p.stats.speed-10)/40,0.05,0.4);
+            if(Math.random()<chance){
+              adjustFan(p, 5);
+              return '과감한 베이스러닝이 이번엔 제대로 통하며 만회에 성공했습니다.';
+            }
+            ctx.lineBoost.runs=(ctx.lineBoost.runs||0)-randInt(3,6);
+            adjustFan(p, -9);
+            applyPermanentStatDelta(p,'mental',-2);
+            return '이번에도 무리한 주루가 아웃으로 이어지며 더그아웃 분위기가 싸늘해졌습니다.';
+          }},
+        { label:'무리한 주루를 자제하고 안전하게 뛴다', resolve:function(p, ctx){
+            adjustFan(p, -2);
+            return '적극성이 부족하다는 아쉬운 평가도 있었지만, 큰 실수 없이 시즌을 이어갔습니다.';
+          }},
+        { label:'코치의 사인을 무시하고 감으로 뛴다', resolve:function(p, ctx){
+            adjustFan(p, -13);
+            applyPermanentStatDelta(p,'mental',-randInt(2,4));
+            if(Math.random()<0.3){
+              var nt3=performTrade(p, '코치진의 지시를 반복해서 무시한 끝에');
+              return '결국 신뢰를 완전히 잃고 '+nt3.name+'로 트레이드되었습니다.';
+            }
+            return '독단적인 판단이 반복되며 코치진과의 신뢰가 크게 무너졌습니다.';
+          }}
+      ]
+    },
+    {
+      id:'contact_prolonged_slump',
+      condition:function(p){ return p.position==='batter' && p.stats.contact<35; },
+      prompt:function(p){ return '터무니없이 낮은 타격 정확도로 장기 슬럼프에 빠지며 2군(퓨처스리그)행 이야기까지 나오고 있습니다.'; },
+      choices:[
+        { label:'스윙을 완전히 갈아엎는다', resolve:function(p, ctx){
+            var chance=clamp(0.25+(p.stats.mental-50)/150,0.1,0.5);
+            if(Math.random()<chance){
+              applyPermanentStatDelta(p,'contact',randInt(3,6));
+              return '과감하게 스윙을 갈아엎은 것이 통하며 감을 되찾기 시작했습니다.';
+            }
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)-randInt(4,8);
+            adjustFan(p, -8);
+            return '급하게 바꾼 스윙이 오히려 감각을 더 무너뜨리며 슬럼프가 길어졌습니다.';
+          }},
+        { label:'2군에서 차분히 재정비한다', resolve:function(p, ctx){
+            adjustFan(p, -4);
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)-2;
+            applyPermanentStatDelta(p,'contact',1,0.2);
+            return '자존심 상하는 2군행이었지만, 차분히 감각을 다시 다듬는 시간이 되었습니다.';
+          }},
+        { label:'그대로 밀어붙인다', resolve:function(p, ctx){
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)-randInt(6,12);
+            adjustFan(p, -12);
+            applyPermanentStatDelta(p,'contact',-randInt(2,4));
+            if(Math.random()<0.3){
+              var nt4=performTrade(p, '끝없는 슬럼프를 방치한 끝에');
+              return '결국 구단이 인내심을 잃고 '+nt4.name+'로 트레이드했습니다.';
+            }
+            return '뚜렷한 대책 없이 밀어붙이기만 하다 슬럼프가 시즌 내내 이어졌습니다.';
+          }}
+      ]
+    },
+    {
+      id:'control_meltdown_demotion',
+      condition:function(p){ return p.position==='pitcher' && p.stats.control<35; },
+      prompt:function(p){ return '제구가 완전히 무너지며 볼넷 남발 끝에 보직 강등 위기에 놓였습니다.'; },
+      choices:[
+        { label:'투구 폼을 원점부터 재정비한다', resolve:function(p, ctx){
+            var chance=clamp(0.2+(p.stats.mental-50)/150,0.08,0.45);
+            if(Math.random()<chance){
+              applyPermanentStatDelta(p,'control',randInt(3,6));
+              return '폼을 원점부터 재정비한 것이 통하며 제구가 눈에 띄게 안정됐습니다.';
+            }
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(6,12);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(3,6);
+            adjustFan(p, -8);
+            return '재정비 과정에서 오히려 밸런스가 무너지며 볼넷과 실점이 함께 늘었습니다.';
+          }},
+        { label:'어떻게든 이닝을 채운다', resolve:function(p, ctx){
+            ctx.lineBoost.bb=(ctx.lineBoost.bb||0)+randInt(8,15);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(4,8);
+            adjustFan(p, -11);
+            applyPermanentStatDelta(p,'mental',-2);
+            if(p.subrole==='선발' && Math.random()<0.4){
+              p.subrole='불펜';
+              return '제구 난조를 견디다 못한 구단이 결국 선발 로테이션에서 불펜으로 보직을 강등시켰습니다.';
+            }
+            return '볼넷과 실점이 쌓이며 힘겹게 이닝을 채웠지만 신뢰는 크게 떨어졌습니다.';
+          }},
+        { label:'휴식을 취하며 재정비 시간을 갖는다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta -= 0.03;
+            adjustFan(p, -5);
+            return '잠시 숨을 고르며 재정비 시간을 가졌지만 근본적인 문제는 해결되지 않았습니다.';
+          }}
+      ]
+    },
+    {
+      id:'velocity_concern_leak',
+      condition:function(p){ return p.position==='pitcher' && p.stats.velocity<35; },
+      prompt:function(p){ return '구속 저하 우려가 언론에 유출되며 트레이드 매물로 거론되기 시작했습니다.'; },
+      choices:[
+        { label:'전력 투구로 구속을 증명하려 한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.12;
+            var chance=clamp(0.25+(p.stats.stamina-50)/150,0.1,0.5);
+            if(Math.random()<chance){
+              applyPermanentStatDelta(p,'velocity',randInt(2,5));
+              return '전력을 다해 구속을 끌어올리려는 시도가 통하며 우려를 잠재웠습니다.';
+            }
+            adjustFan(p, -5);
+            return '무리하게 힘을 낸 것이 오히려 몸에 부담만 남기며 구속은 그대로였습니다.';
+          }},
+        { label:'변화구 위주로 스타일을 바꾼다', resolve:function(p, ctx){
+            applyPermanentStatDelta(p,'breaking',randInt(1,3),0.2);
+            ctx.lineBoost.k=(ctx.lineBoost.k||0)-randInt(5,10);
+            adjustFan(p, -3);
+            return '구속 대신 변화구 의존도를 높이며 스타일을 바꿨지만 탈삼진은 줄었습니다.';
+          }},
+        { label:'루머를 방치한다', resolve:function(p, ctx){
+            adjustFan(p, -10);
+            if(Math.random()<0.35){
+              var nt5=performTrade(p, '구속 저하 우려 속 트레이드 매물로 거론된 끝에');
+              return '루머를 방치한 사이 결국 '+nt5.name+'로 트레이드되었습니다.';
+            }
+            return '별다른 대응 없이 루머를 방치하자 트레이드설만 더 무성해졌습니다.';
+          }}
+      ]
+    },
+    {
+      id:'stamina_collapse_meltdown',
+      condition:function(p){ return p.position==='pitcher' && p.stats.stamina<35; },
+      prompt:function(p){ return '체력 저하로 경기 후반마다 급격히 무너지는 패턴이 반복되고 있습니다.'; },
+      choices:[
+        { label:'체력 훈련에 매진한다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.06;
+            applyPermanentStatDelta(p,'stamina',randInt(3,6),0.2);
+            return '지루하고 힘든 체력 훈련을 묵묵히 견뎌내며 조금씩 버티는 힘이 늘었습니다.';
+          }},
+        { label:'이닝을 줄여 무리하지 않는다', resolve:function(p, ctx){
+            if(p.subrole==='선발'){
+              p.subrole='불펜';
+              adjustFan(p, -4);
+              return '후반 이닝 붕괴가 반복되자 구단이 선발 대신 이닝 부담이 적은 불펜으로 보직을 바꿨습니다.';
+            }
+            adjustFan(p, -2);
+            return '무리하지 않는 선에서 이닝을 관리하며 시즌을 이어갔습니다.';
+          }},
+        { label:'그대로 밀어붙인다', resolve:function(p, ctx){
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(4,9);
+            ctx.injuryRiskDelta += 0.15;
+            adjustFan(p, -9);
+            applyPermanentStatDelta(p,'stamina',-randInt(2,4));
+            return '체력 저하를 방치한 채 밀어붙이다 후반 이닝마다 대량 실점이 반복됐습니다.';
+          }}
+      ]
+    },
+    {
+      id:'predictable_breaking_ball',
+      condition:function(p){ return p.position==='pitcher' && p.stats.breaking<35; },
+      prompt:function(p){ return '단조로운 구종 배합이 완전히 읽히며 타자들에게 손쉬운 먹잇감이 되고 있습니다.'; },
+      choices:[
+        { label:'새로운 변화구 개발에 매달린다', resolve:function(p, ctx){
+            ctx.injuryRiskDelta += 0.03;
+            var chance=clamp(0.25+(p.stats.mental-50)/150,0.1,0.5);
+            if(Math.random()<chance){
+              applyPermanentStatDelta(p,'breaking',randInt(3,6));
+              return '새로운 변화구를 장착하는 데 성공하며 볼 배합이 한결 다양해졌습니다.';
+            }
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(3,6);
+            return '새 구종 연마가 뜻대로 되지 않으며 오히려 밸런스만 흔들렸습니다.';
+          }},
+        { label:'구속과 로케이션으로 승부한다', resolve:function(p, ctx){
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(4,8);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(2,5);
+            adjustFan(p, -6);
+            return '단조로운 구종을 그대로 안고 승부하다 안타를 자주 허용했습니다.';
+          }},
+        { label:'패턴을 바꾸지 않고 밀어붙인다', resolve:function(p, ctx){
+            ctx.lineBoost.h=(ctx.lineBoost.h||0)+randInt(8,14);
+            ctx.lineBoost.er=(ctx.lineBoost.er||0)+randInt(5,9);
+            adjustFan(p, -11);
+            applyPermanentStatDelta(p,'mental',-randInt(2,4));
+            if(Math.random()<0.3){
+              var nt6=performTrade(p, '완전히 읽힌 패턴을 끝내 바꾸지 않은 채');
+              return '결국 '+nt6.name+'로 트레이드되며 팀을 옮기게 되었습니다.';
+            }
+            return '읽힌 패턴을 고집하다 실점이 쌓이며 불안한 모습이 계속됐습니다.';
+          }}
+      ]
     }
   ];
 
@@ -3115,7 +3648,7 @@
     }).join('');
 
     if(militaryUnresolved(p) && p.age<MILITARY_FORCE_AGE){
-      html += '<p class="lede" style="font-size:13px;">병역: '+militaryStatusLabel(p)+'. 국제대회 금메달로 면제받거나, 원하는 시점에 상무에 조기 입대할 수 있습니다.</p>'+
+      html += '<p class="lede" style="font-size:13px;">병역: '+militaryStatusLabel(p)+'. 아시안게임 금메달이나 올림픽 메달로 면제받거나, 원하는 시점에 상무에 조기 입대할 수 있습니다.</p>'+
         '<div class="btn-row">'+
           '<button class="btn btn-outline" data-action="military-volunteer">상무 조기 입대</button>'+
         '</div>';
