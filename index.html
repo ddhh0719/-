@@ -255,6 +255,11 @@
   .ssi-arrow{color:var(--ink-dim);font-size:11px;}
 
   /* ---------- season event choices ---------- */
+  /* Item 30(Phase4-16~19): category visual — a small icon tile scaffold in place of a real
+     illustration/photo (out of scope for this environment to generate); gives each event
+     category a distinct, consistent glyph+color instead of plain text alone. */
+  .event-visual{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--ev-color-bg,rgba(120,120,120,.16));color:var(--ev-color,var(--ink-dim));margin-bottom:10px;}
+  .event-visual svg{width:26px;height:26px;}
   .event-category-tag{display:inline-block;font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;color:var(--turf);border:1px solid var(--turf);border-radius:20px;padding:2px 10px;margin-bottom:10px;}
   .event-choice-btn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;}
   .event-choice-hint{font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);font-weight:400;}
@@ -561,20 +566,84 @@
     return fmtNum(v)+'만원';
   }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // Item 20 (2026-09): shared helper for natural Korean postposition (조사) attachment to a
+  // dynamic team/player name, instead of scattering the "와(과)"/"을(를)" dual-notation (or
+  // outright wrong fixed particles) across dozens of hand-written highlight strings. Uses the
+  // standard Hangul syllable decomposition (a syllable's code point minus 0xAC00, mod 28 — 0
+  // means no trailing consonant/받침) to pick the correct form; a non-Hangul ending (numbers,
+  // English team names, etc.) defaults to the "has 받침" form, matching common convention.
+  var JOSA_PAIRS = { '은는':['은','는'], '이가':['이','가'], '을를':['을','를'], '과와':['과','와'], '으로로':['으로','로'] };
+  function josa(word, type){
+    var s=String(word||'');
+    if(!s.length) return '';
+    var last=s.charCodeAt(s.length-1);
+    var hasBatchim = (last>=0xAC00 && last<=0xD7A3) ? (((last-0xAC00)%28)!==0) : true;
+    var pair=JOSA_PAIRS[type];
+    if(!pair) return '';
+    return hasBatchim ? pair[0] : pair[1];
+  }
+  function withJosa(word, type){ return String(word||'')+josa(word, type); }
+  // Item 20 (2026-09): consistent wording for "how long has this player been with their current
+  // team" across every screen that shows it, instead of always printing a raw "N년째" even when
+  // N is 0 (which used to read as a slightly odd "0년째 활약"/"0년째 정착 중"). 0 tenure in this
+  // player's very first 1군 season reads as "1군 첫 시즌"; 0 tenure any other time (a fresh trade/
+  // FA/2차드래프트arrival) reads as "새롭게 합류"; anything else is "N시즌째 활약".
+  function teamTenureLabel(player){
+    var yrs=player.teamTenureYears||0;
+    if(yrs<=0){
+      if(player.majorDebutYear!==undefined && player.majorDebutYear===player.careerYears) return '1군 첫 시즌';
+      return '새롭게 합류';
+    }
+    return yrs+'시즌째 활약';
+  }
+  // Small inline badge showing a salary offer's percent change against the player's CURRENT
+  // salary — used on every contract-related screen (negotiation, FA, breakdown-fallout) so
+  // the player can see at a glance how big a jump/cut each option really is, not just the
+  // raw won amount. Reuses the existing .trend-up/.trend-down (turf green / danger red)
+  // color language already used elsewhere (e.g. the league leaderboard).
+  function salaryChangeLabel(oldV, newV){
+    if(!oldV || oldV<=0) return '';
+    var pct = Math.round((newV/oldV - 1)*100);
+    if(pct===0) return '<span style="color:var(--ink-dim);font-size:12px;">(변동 없음)</span>';
+    var cls = pct>0 ? 'trend-up' : 'trend-down';
+    var arrow = pct>0 ? '▲' : '▼';
+    return '<span class="'+cls+'" style="font-size:12px;font-weight:700;">('+arrow+' '+Math.abs(pct)+'%)</span>';
+  }
 
   /* ---------------- static data ---------------- */
+  // Item 27 (2026-09, "팀별 정체성"): every team used to be interchangeable — same money, same
+  // strength baseline, same everything but a name and a color. marketTier is the team's financial
+  // muscle (how aggressively it can bid in FA/trades — see teamMarketMult below); philosophy is
+  // its front-office identity (win_now favors proven veterans and spends to win immediately;
+  // rebuild favors developing its own and is quicker to move an aging/declining veteran on;
+  // balanced sits in between) — currently used for flavor text and a small team-strength baseline
+  // bias (see ensureTeamStrength), with room for deeper hooks (trade-target weighting, etc.) later
+  // without another data-shape change.
   var TEAMS = [
-    {name:'서울 코메츠', color:'#3b6fd6'},
-    {name:'인천 실버웨일스', color:'#2f8f9d'},
-    {name:'수원 팰컨스', color:'#5a5fc7'},
-    {name:'대전 볼케이노스', color:'#c1552c'},
-    {name:'대구 스콜피온스', color:'#a33b52'},
-    {name:'부산 타이푼스', color:'#1f7a5c'},
-    {name:'광주 파이오니어스', color:'#b8841f'},
-    {name:'창원 로켓츠', color:'#6a4fb0'},
-    {name:'청주 그리폰스', color:'#3d8c40'},
-    {name:'제주 드래곤테일즈', color:'#b23a6e'}
+    {name:'서울 코메츠', color:'#3b6fd6', marketTier:'big', philosophy:'win_now'},
+    {name:'인천 실버웨일스', color:'#2f8f9d', marketTier:'mid', philosophy:'balanced'},
+    {name:'수원 팰컨스', color:'#5a5fc7', marketTier:'mid', philosophy:'rebuild'},
+    {name:'대전 볼케이노스', color:'#c1552c', marketTier:'small', philosophy:'rebuild'},
+    {name:'대구 스콜피온스', color:'#a33b52', marketTier:'big', philosophy:'win_now'},
+    {name:'부산 타이푼스', color:'#1f7a5c', marketTier:'big', philosophy:'balanced'},
+    {name:'광주 파이오니어스', color:'#b8841f', marketTier:'mid', philosophy:'balanced'},
+    {name:'창원 로켓츠', color:'#6a4fb0', marketTier:'small', philosophy:'rebuild'},
+    {name:'청주 그리폰스', color:'#3d8c40', marketTier:'small', philosophy:'balanced'},
+    {name:'제주 드래곤테일즈', color:'#b23a6e', marketTier:'mid', philosophy:'win_now'}
   ];
+  var TEAM_MARKET_MULT = { big:1.18, mid:1.0, small:0.84 };
+  // Accepts a team object, a bare team name, or undefined/null (treated as a neutral mid-market
+  // team) — every call site below can pass whatever it already has on hand without a lookup.
+  function teamMarketMult(team){
+    if(!team) return 1.0;
+    var tier = typeof team==='string' ? (teamByName(team)||{}).marketTier : team.marketTier;
+    return TEAM_MARKET_MULT[tier] || 1.0;
+  }
+  function teamByName(name){ return TEAMS.filter(function(t){ return t.name===name; })[0] || null; }
+  var TEAM_PHILOSOPHY_LABEL = { win_now:'성적 지향', rebuild:'육성 지향', balanced:'균형' };
+  function teamPhilosophyLabel(team){ return TEAM_PHILOSOPHY_LABEL[team && team.philosophy] || '균형'; }
+  var TEAM_MARKET_LABEL = { big:'대형 시장', mid:'중형 시장', small:'소형 시장' };
+  function teamMarketLabel(team){ return TEAM_MARKET_LABEL[team && team.marketTier] || '중형 시장'; }
   // Real KBO all-time career leaderboards (top 10 per category), used only to place a
   // simulated career's counting stats in context on the retirement screen. Figures are
   // recent-season snapshots — active players' real totals may have grown further since.
@@ -767,7 +836,26 @@
     return {grade:'F', label:'지명 안정권 밖'};
   }
 
-  function runDraft(score){
+  // Item 11 (2026-09): replaced the old single linear formula (bonus = (11-round)*7800±1400),
+  // which let a 10라운드 pick sign for up to ~9,200만원 — barely below a mid-round bonus and far
+  // too generous for the bottom of the draft — with an explicit per-round RANGE. Pick order
+  // (1 = top of the round) and the player's hidden potential grade (a scout sees more upside
+  // than the public round/pick already implies) add real but bounded variance WITHIN a round,
+  // instead of the whole scale sliding on one formula.
+  var ROUND_BONUS_RANGE = {
+    1:[15000,45000], 2:[9000,16000], 3:[6000,9500], 4:[4500,6500], 5:[3200,4800],
+    6:[2400,3500], 7:[1800,2600], 8:[1400,2000], 9:[1100,1600], 10:[800,1300]
+  };
+  var POTENTIAL_BONUS_MULT = { B:0.96, 'B+':1.0, A:1.05, 'A+':1.12 };
+  function rookieSigningBonus(round, pickNo, potentialGrade){
+    var range=ROUND_BONUS_RANGE[round]||ROUND_BONUS_RANGE[10];
+    var frac=clamp((10-pickNo)/9, 0, 1); // pick 1 (top of the round) -> 1, pick 10 (bottom) -> 0
+    var base=range[0]+(range[1]-range[0])*frac;
+    base *= POTENTIAL_BONUS_MULT[potentialGrade]||1.0;
+    base *= (1+rand(-0.05,0.05)); // small natural noise, round/pick/grade still dominate
+    return Math.max(500, Math.round(base/100)*100);
+  }
+  function runDraft(score, potentialGrade){
     if(score<40) return {drafted:false};
     var round;
     if(score>=105) round=1;
@@ -777,7 +865,7 @@
     else round=randInt(7,10);
     var pickNo=randInt(1,10);
     var team=TEAMS[randInt(0,TEAMS.length-1)];
-    var bonus=Math.max(2800, Math.round((11-round)*7800+rand(-1400,1400)));
+    var bonus=rookieSigningBonus(round, pickNo, potentialGrade);
     return {drafted:true, round:round, pick:pickNo, team:team, bonus:bonus};
   }
 
@@ -1087,15 +1175,21 @@
   // — a long career can rack up the same award many times over, and a wall of near-duplicate
   // pills differing only by year was hard to read at a glance. Order follows each award's first
   // occurrence so the list still reads roughly chronologically by "when this became a thing".
+  // Item 20 (2026-09, a11y): the pills used to be joined with '' — visually fine (each pill is
+  // its own bordered chip), but with no whitespace between adjacent <span> elements a screen
+  // reader can read the whole row as one run-on string ("정규시즌MVP골든글러브2회..."). Wrapping
+  // in role="list"/"listitem" plus an explicit space between pills gives assistive tech a clear
+  // boundary between each award without changing how it looks.
   function renderAwardPills(awardsAll){
     var counts={}, order=[];
     (awardsAll||[]).forEach(function(a){
       if(counts[a.name]===undefined){ counts[a.name]=0; order.push(a.name); }
       counts[a.name]++;
     });
-    return order.map(function(name){
-      return '<span class="award-pill">'+esc(name)+(counts[name]>1?' '+counts[name]+'회':'')+'</span>';
-    }).join('');
+    if(!order.length) return '';
+    return '<span role="list" aria-label="수상 내역">'+order.map(function(name){
+      return '<span class="award-pill" role="listitem">'+esc(name)+(counts[name]>1?' '+counts[name]+'회':'')+'</span>';
+    }).join(' ')+'</span>';
   }
   function awardChance(value, threshold, span, higherIsBetter){
     var diff = higherIsBetter ? (value-threshold) : (threshold-value);
@@ -1107,40 +1201,31 @@
     return Math.random() < awardChance(value, threshold, span, higherIsBetter);
   }
 
+  // MVP/골든글러브/신인왕 ONLY — every "기록왕" title (타격왕, 홈런왕, ...) is no longer decided
+  // here. Those used to be independent probability rolls against fixed thresholds, which could
+  // (and did) crown a player 타점왕 while the 리그 탭's own leaderboard showed someone else clearly
+  // ahead of them — two unrelated random processes describing the same season. Record-king titles
+  // are now decided by recordKingAwardsFromBoards() against the SAME generated field the
+  // leaderboard displays (see generateSeasonLeagueRecords above); this function keeps only the
+  // three awards that are genuinely evaluative rather than a countable field-wide rank (MVP/GG
+  // weigh multiple stats and context together, 신인왕 is judged only against other rookies), so a
+  // probability curve is still the right tool for them.
   function determineAwards(player, line, isRookieYear){
     var awards=[];
     if(player.position==='batter'){
       var scB=seasonScoreBatter(line);
-      // Thresholds below are calibrated against the batter avg/HR formula (see
-      // simulateBatterSeason) — when that formula moves, these need to move with it or
-      // award/legend rates drift out from under whatever they were tuned against.
-      if(line.ab>=350 && rollAward(line.avg, 0.365, 0.035, true)) awards.push('타격왕');
-      if(rollAward(line.hr, 38, 6, true)) awards.push('홈런왕');
-      if(rollAward(line.rbi, 114, 15, true)) awards.push('타점왕');
-      if(line.ab>=300 && rollAward(line.h, 170, 15, true)) awards.push('최다안타왕');
-      if((line.ab+line.bb)>=350 && rollAward(line.obp, 0.450, 0.035, true)) awards.push('출루율왕');
-      if(rollAward(line.runs, 95, 12, true)) awards.push('득점왕');
-      if(rollAward(line.sb, 35, 8, true)) awards.push('도루왕');
-      // MVP/GG were the one pair of rate-based awards with no plate-appearance floor, so a
-      // short (often injury-shortened) season — whose OPS swings much wider now thanks to
-      // seasonVarianceScale — was actually MORE likely to post an MVP-caliber OPS than a
-      // full healthy season. Gated on the same ab>=350 already used for 타격왕/출루율왕.
+      // MVP/GG need a plate-appearance floor — a short (often injury-shortened) season's OPS
+      // swings much wider (seasonVarianceScale), so without a floor it could out-qualify a full,
+      // healthy season purely from small-sample variance.
       if(line.ab>=350 && rollAward(line.ops, 1.100, 0.06, true)) awards.push('정규시즌 MVP');
       else if(line.ab>=350 && rollAward(line.ops, 0.990, 0.05, true)) awards.push('골든글러브');
       if(isRookieYear && rollAward(scB, 151, 18, true)) awards.push('신인왕');
     } else {
       var scP=seasonScorePitcher(line);
-      var decisions=line.wins+line.losses;
       // Same fix as the batter side, but the innings floor has to be role-aware: a full,
       // healthy relief season only ever reaches ~80-90 IP, nowhere near a starter's ~150+,
       // so one shared floor would make MVP/GG mathematically impossible for any reliever.
       var mvpIpFloor = (player.subrole==='불펜' || player.subrole==='마무리') ? 45 : 110;
-      if(line.ip>=150 && rollAward(line.era, 2.70, 0.30, false)) awards.push('평균자책점왕');
-      if(rollAward(line.k, 190, 20, true)) awards.push('탈삼진왕');
-      if(rollAward(line.wins, 16, 3, true)) awards.push('다승왕');
-      if(rollAward(line.saves, 32, 5, true)) awards.push('구원왕');
-      if(rollAward(line.holds||0, 30, 6, true)) awards.push('홀드왕');
-      if(decisions>=10 && rollAward(line.wins/decisions, 0.640, 0.08, true)) awards.push('승률왕');
       if(line.ip>=mvpIpFloor && rollAward(scP, 95, 16, true)) awards.push('정규시즌 MVP');
       else if(line.ip>=mvpIpFloor && rollAward(scP, 75, 14, true)) awards.push('골든글러브');
       if(isRookieYear && rollAward(scP, 70, 12, true)) awards.push('신인왕');
@@ -1148,14 +1233,39 @@
     return awards;
   }
 
-  function checkForcedRetirement(player){
+  // Item 25 (2026-09, "은퇴 방식 현실화"): the old system was a single hard age>=41 cutoff — every
+  // career ended on exactly the same birthday no matter how the player was doing. Replaced with:
+  // (1) a per-player hard cap rolled once into [RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX]
+  // that still ends a career unconditionally (so nobody plays forever), and (2) a probabilistic
+  // roll starting at RETIREMENT_PROBABILISTIC_AGE that factors in age, OVR, this season's
+  // performance (perfHint) and injury history — so a still-elite, healthy 39-year-old can keep
+  // playing while a faded, injury-worn one may call it a career years before the hard cap.
+  // The sustained-poor-form 방출 (release) path is unchanged and independent of age.
+  var RETIREMENT_PROBABILISTIC_AGE = 38;
+  var RETIREMENT_HARD_CAP_MIN = 42, RETIREMENT_HARD_CAP_MAX = 45;
+  function checkForcedRetirement(player, perfHint){
     var ovr=overall(player);
-    if(player.age>=41) return '나이';
+    if(player.retirementAgeCap===undefined) player.retirementAgeCap=randInt(RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX);
+    // Final, unconditional limit — no choice screen here, unlike the soft trigger below.
+    if(player.age>=player.retirementAgeCap) return '나이';
     if(ovr<50){
       player.lowFormYears=(player.lowFormYears||0)+1;
       if(player.age>=33 && player.lowFormYears>=2) return '방출';
     } else {
       player.lowFormYears=0;
+    }
+    // From RETIREMENT_PROBABILISTIC_AGE onward, retirement becomes a real (but escalating, not
+    // instant) possibility even well short of the hard cap. Accepting either of Item 25's
+    // "한 시즌 더 도전"/"역할 축소 수용" choices doesn't suppress this outright — it just means the
+    // roll happens again next season, same as any season that simply didn't trigger it.
+    if(player.age>=RETIREMENT_PROBABILISTIC_AGE){
+      var yearsOver=player.age-RETIREMENT_PROBABILISTIC_AGE;
+      var ovrFactor=clamp((68-ovr)/68, -0.35, 0.6); // a faded OVR pushes the chance up, elite OVR pulls it down
+      var perfFactor=clamp(-(perfHint||0)*0.3, -0.15, 0.3); // a strong recent season pulls the chance down
+      var injuryFactor=clamp((player.severeInjuryCount||0)*0.05, 0, 0.25);
+      var roleFactor=player.roleReduced ? -0.12 : 0; // accepting a reduced role earlier eases the pressure
+      var chance=clamp(0.07*yearsOver + ovrFactor*0.35 + perfFactor + injuryFactor + roleFactor, 0.03, 0.85);
+      if(Math.random()<chance) return '고령';
     }
     return null;
   }
@@ -1283,6 +1393,92 @@
     if(player.playoffCount===undefined) player.playoffCount=0;
     if(player.champCount===undefined) player.champCount=0;
     if(!Array.isArray(player.teamRankHistory)) player.teamRankHistory=[];
+    // Itemized earnings breakdown (연봉/계약금/인센티브) — a save from before this existed only
+    // has the lump p.totalEarnings, which can't be retroactively split by source, so the three
+    // buckets simply start at 0 for an old save. p.totalEarnings itself is left untouched (it is
+    // never recomputed from the buckets — see addEarnings), so a migrated save's grand total
+    // still matches exactly what it already was.
+    if(player.totalSalaryEarnings===undefined) player.totalSalaryEarnings=0;
+    if(player.totalSigningBonus===undefined) player.totalSigningBonus=0;
+    if(player.totalIncentiveEarnings===undefined) player.totalIncentiveEarnings=0;
+    if(player.faMoveCount===undefined) player.faMoveCount=0;
+    if(player.negotiationMoveCount===undefined) player.negotiationMoveCount=0;
+    // A save from before debutTeamName existed has no way to know what team the player actually
+    // debuted for — deliberately left null (never guessed from current team) rather than risk
+    // wrongly crediting/denying 원클럽맨 for a save this can't actually verify. teamMoveHistory
+    // similarly can't be reconstructed after the fact, so an old save simply starts its move log
+    // empty from this point forward.
+    if(player.debutTeamName===undefined) player.debutTeamName=null;
+    if(!Array.isArray(player.teamMoveHistory)) player.teamMoveHistory=[];
+    // 커리어 목표 실기능화(Phase 2 Item 8): injuryCount는 iron_man 목표 진행률의 재료, overseasMoveAchieved는
+    // overseas_bound 목표의 실제 달성 플래그, goalMilestoneHit은 목표 달성 보상 중복 지급 방지용. 구
+    // 세이브는 모두 "아직 달성/발생하지 않음" 상태로 시작 — 과거 시즌을 소급 계산하지 않는다.
+    if(player.injuryCount===undefined) player.injuryCount=0;
+    if(player.overseasMoveAchieved===undefined) player.overseasMoveAchieved=false;
+    if(player.goalMilestoneHit===undefined) player.goalMilestoneHit=false;
+    // Item 23 (FA 자격 현실화, 2026-09): a save from before this existed had yearsToFA counting
+    // down from the OLD flat 3-season cycle. We never retroactively rewrite yearsToFA itself (that
+    // would silently change how soon an in-progress save reaches FA), so faCycleTotal backfills to
+    // 3 to match whatever cycle that save was already mid-way through — only a FRESH career
+    // created after this migration starts at the new 8/4-season cycle (set at creation time).
+    // contractYearsRemaining defaults to 0 (no multi-year lock) so an old save immediately resumes
+    // the normal annual negotiation flow it already knew, rather than being silently frozen out of
+    // negotiation by a field it never had.
+    if(player.faCycleTotal===undefined) player.faCycleTotal=3;
+    if(player.yearsToFA===undefined) player.yearsToFA=3;
+    if(player.contractYearsRemaining===undefined) player.contractYearsRemaining=0;
+    if(player.lastContractYears===undefined) player.lastContractYears=0;
+    if(player.lastContractAnnualSalary===undefined) player.lastContractAnnualSalary=0;
+    if(player.lastContractTotal===undefined) player.lastContractTotal=0;
+    // Item 24 (트레이드 발생 방식): a save from before this existed never had a chance to
+    // accumulate trade risk, so it starts at 0 exactly like a brand-new career would — this is
+    // pure upside for an old save (never a mid-flight pendingTradeRequest to preserve, since that
+    // field's own migration/save-format never changes here).
+    if(player.tradeRiskLevel===undefined) player.tradeRiskLevel=0;
+    if(player.tradeProtectionYears===undefined) player.tradeProtectionYears=0;
+    // Item 25 (은퇴 방식 현실화): an old save never rolled a per-player hard-cap retirement age —
+    // give it one now, same range a brand-new career would get, so it isn't silently exempt from
+    // the new final cutoff. roleReduced defaults false (no old save could have accepted that choice).
+    if(player.retirementAgeCap===undefined) player.retirementAgeCap=randInt(RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX);
+    if(player.roleReduced===undefined) player.roleReduced=false;
+    // Item 29 (심각한 부상·재활): an old save predates the multi-season injury arc entirely — it
+    // never had a chance to be mid-arc, so it simply starts with none, exactly like a brand-new
+    // career would (pure upside: no in-flight 'diagnosed'/'recovering' state to reconstruct).
+    if(player.injuryArc===undefined) player.injuryArc=null;
+    // Item 30 (포스트시즌 강화): an old save never had a pending postseason strategy in flight
+    // (it's consumed within the same season it's set), so it simply starts with none.
+    if(player.pendingPostseasonStrategy===undefined) player.pendingPostseasonStrategy=null;
+    // Item 26 (라이벌 시스템 독립화): an old save's rival never had its own age/OVR/potential/injury
+    // fields — back-derive an OVR from its last known season score (same relationship rivalStatLine's
+    // fallback branch uses) rather than jumping to some unrelated random value, then backfill
+    // everything else the new independent simulation needs.
+    if(player.rival){
+      var rv=player.rival;
+      if(rv.age===undefined) rv.age=player.age;
+      if(rv.potentialGrade===undefined) rv.potentialGrade=rollPotentialGrade();
+      if(rv.ovrCeiling===undefined) rv.ovrCeiling=rivalPotentialCeiling(rv.potentialGrade);
+      if(rv.ovr===undefined){
+        var lastScore = (rv.scoreLog && rv.scoreLog.length) ? rv.scoreLog[rv.scoreLog.length-1] : 50;
+        var ovrGuess;
+        if(rv.position==='batter') ovrGuess = 30 + (lastScore-88)/1.80;
+        else if(rv.subrole==='선발') ovrGuess = 30 + (lastScore-19)/2.66;
+        else if(rv.subrole==='마무리') ovrGuess = 30 + (lastScore-12)/2.17;
+        else ovrGuess = 30 + (lastScore-14)/2.11;
+        rv.ovr=clamp(Math.round(ovrGuess), 15, 99);
+      }
+      if(rv.severeInjuryCount===undefined) rv.severeInjuryCount=0;
+      if(rv.retired===undefined) rv.retired=false;
+      if(rv.retirementAgeCap===undefined) rv.retirementAgeCap=randInt(RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX);
+      if(rv.team===undefined) rv.team=(player.team?player.team.name:pick(TEAMS).name);
+    }
+    // Item 27 (팀별 정체성): a save from before this existed stored player.team as a plain
+    // {name,color} snapshot with no marketTier/philosophy — re-link it to the live TEAMS entry
+    // (by name) so an old save's club immediately picks up its financial/philosophical identity
+    // instead of silently falling back to a neutral mid-market/balanced default forever.
+    if(player.team){
+      var liveTeam=teamByName(player.team.name);
+      if(liveTeam) player.team=liveTeam;
+    }
   }
   // How many seasons remain until the SOONER of the two tracks' next tournament year (0 if this
   // season IS one), and what year/name/track that tournament is — used for the "D-N년" countdown
@@ -1497,16 +1693,27 @@
   }
   function teamOfferSalary(player, perf){
     var raise=clamp(perf*0.35, -0.25, 0.45);
-    var ceiling=salaryCeiling(player);
-    // The raise itself tapers off the closer salary already sits to this player's realistic
-    // ceiling — still room to grow while there's real headroom, harder and harder to sustain
-    // once pay already reflects what a player of this quality is worth.
+    var talentCeiling=salaryCeiling(player);
+    // Item 27: a team's own financial identity stretches (big market) or tightens (small market)
+    // how far above the player's pure talent-based ceiling their own club can actually stretch —
+    // a below-average player never gets a windfall from this, but a genuine star stuck at a
+    // small-market club caps out earning noticeably less than the same star would at a big one, a
+    // real pressure toward eventually testing free agency. No player.team (e.g. a bare fixture in
+    // a test) makes teamCeiling===talentCeiling exactly (teamMarketMult(undefined) is 1.0), so
+    // that case reproduces the pre-Item-27 formula exactly.
+    var teamCeiling=Math.round(talentCeiling*teamMarketMult(player.team));
+    // The raise itself tapers off the closer salary already sits to THIS TEAM'S realistic ceiling
+    // (not the plain talent ceiling) — still room to grow while there's real headroom, harder and
+    // harder to sustain once pay already reflects what this club can actually pay a player of this
+    // quality. Using the team-scaled ceiling here (rather than the talent one) is what lets a
+    // big-market club keep raising a star's pay past the "pure talent" number instead of the raise
+    // decaying to ~0 at the same salary regardless of which club is paying.
     if(raise>0){
-      var headroom=clamp((ceiling-player.salary)/ceiling, 0, 1);
+      var headroom=clamp((teamCeiling-player.salary)/teamCeiling, 0, 1);
       raise=raise*Math.pow(headroom, 1.4);
     }
     var raw=Math.round(player.salary*(1+raise));
-    return clamp(Math.max(2700, raw), 2700, ceiling);
+    return clamp(Math.max(2700, raw), 2700, teamCeiling);
   }
   function fanApprovalLabel(v){
     if(v>=80) return '프랜차이즈 스타';
@@ -1528,7 +1735,48 @@
     }
     player.fanApproval = roundClamp(cur+delta, 0, 100);
   }
-  function performTrade(player, reasonText, targetTeam){
+  // Every won a player actually earns funnels through here so p.totalEarnings (the simple grand
+  // total, kept for backward compatibility with existing achievement checks and displays) and the
+  // matching itemized bucket (연봉/계약금/인센티브) always move together — never update one without
+  // the other, or the itemized breakdown on the retirement screen will silently drift out of sync
+  // with the total. Club-to-club compensation (2차 드래프트 보상금) deliberately does NOT go
+  // through this function — it is never the player's own money.
+  function addEarnings(player, bucket, amount){
+    if(!amount) return;
+    player.totalEarnings=(player.totalEarnings||0)+amount;
+    if(bucket==='salary') player.totalSalaryEarnings=(player.totalSalaryEarnings||0)+amount;
+    else if(bucket==='bonus') player.totalSigningBonus=(player.totalSigningBonus||0)+amount;
+    else if(bucket==='incentive') player.totalIncentiveEarnings=(player.totalIncentiveEarnings||0)+amount;
+  }
+  // Every "player switches teams" path in the game funnels through here, but they are NOT all
+  // the same event — a real trade is the club dealing the player away against their will, FA is
+  // the player's own market choice after their contract ran out, and a negotiation-breakdown move
+  // is the player choosing to leave after their OWN team's talks fell apart. Conflating all of
+  // these as "a trade" (2026-09, "FA·트레이드·2차드래프트 구분" fix) meant an FA departure bumped
+  // tradeCount, wrote "트레이드되었습니다" into an FA player's highlights, and let repeated FA
+  // moves alone unlock a "트레이드 3회" achievement — none of which is actually true. `moveType`
+  // picks which counter increments, which highlight wording is used, and how much fan approval
+  // the move costs (a forced trade stings the fanbase far more than a player leaving in free
+  // agency, which stings more than simply re-signing elsewhere after a breakdown — but even a
+  // breakdown move is worse for goodwill than staying). 2차 드래프트 does NOT go through this
+  // function at all — see finishFuturesSeason, which increments secondDraftCount directly and
+  // deliberately keeps that club-to-club move out of tradeCount/faMoveCount entirely.
+  // The ONE definition of "원클럽맨" — used identically by the achievement check AND the
+  // retirement-screen trait (deriveTraits), which previously disagreed: the achievement required
+  // tradeCount===0 (so an FA/negotiation-breakdown move that never touched tradeCount could still
+  // pass), while the trait just checked teamTenureYears>=10 (so a player who was traded away and
+  // later traded BACK to the same team for a long second stint could still show "원클럽맨",
+  // despite very much not being a one-club man). A true one-club man must still be with the exact
+  // team they debuted for, and must never have changed teams by ANY move type — trade, FA,
+  // negotiation-breakdown, or 2차 드래프트.
+  var MOVE_TYPE_LABELS={ trade:'트레이드', fa:'FA 이적', nonfa:'협상 결렬 이적', seconddraft:'2차 드래프트' };
+  function isOneClubMan(player){
+    return !!player.debutTeamName && !!player.team && player.team.name===player.debutTeamName &&
+      (player.tradeCount||0)===0 && (player.faMoveCount||0)===0 &&
+      (player.negotiationMoveCount||0)===0 && (player.secondDraftCount||0)===0;
+  }
+  function performTrade(player, reasonText, targetTeam, moveType){
+    moveType = moveType || 'trade';
     var newTeam=targetTeam;
     if(!newTeam){
       var candidates=TEAMS.filter(function(t){ return !player.team || t.name!==player.team.name; });
@@ -1537,9 +1785,25 @@
     var oldName = player.team ? player.team.name : '무소속';
     player.team=newTeam;
     player.teamTenureYears=0;
-    player.tradeCount=(player.tradeCount||0)+1;
-    adjustFan(player, -6); // leaving a team always costs some goodwill with the fanbase you're leaving
-    player.highlights.push({year:player.careerYears, text:reasonText+' '+oldName+'에서 '+newTeam.name+'로 트레이드되었습니다.'});
+    // Item 24: any real move (of any type) starts a fresh protection window on the new team —
+    // a player who just moved shouldn't immediately face another involuntary-trade gate.
+    player.tradeProtectionYears=TRADE_PROTECTION_YEARS;
+    player.tradeRiskLevel=0;
+    if(moveType==='fa'){
+      player.faMoveCount=(player.faMoveCount||0)+1;
+      adjustFan(player, -2); // a clean FA departure still costs some goodwill, but nowhere near a forced trade
+      player.highlights.push({year:player.careerYears, text:reasonText+' '+withJosa(oldName,'을를')+' 떠나 '+withJosa(newTeam.name,'과와')+' FA 계약을 맺었습니다.'});
+    } else if(moveType==='nonfa'){
+      player.negotiationMoveCount=(player.negotiationMoveCount||0)+1;
+      adjustFan(player, -4); // worse than a clean FA exit (this follows a public breakdown), better than a forced trade
+      player.highlights.push({year:player.careerYears, text:reasonText+' '+withJosa(oldName,'을를')+' 떠나 '+withJosa(newTeam.name,'으로로')+' 이적했습니다.'});
+    } else {
+      player.tradeCount=(player.tradeCount||0)+1;
+      adjustFan(player, -6); // leaving a team always costs some goodwill with the fanbase you're leaving
+      player.highlights.push({year:player.careerYears, text:reasonText+' '+oldName+'에서 '+withJosa(newTeam.name,'으로로')+' 트레이드되었습니다.'});
+    }
+    if(!Array.isArray(player.teamMoveHistory)) player.teamMoveHistory=[];
+    player.teamMoveHistory.push({year:player.careerYears, from:oldName, to:newTeam.name, type:moveType});
     return newTeam;
   }
 
@@ -1633,7 +1897,7 @@
     { id:'national_team2', name:'태극마크 2회', desc:'국가대표팀에 2회 이상 선발된다.', position:'any', scope:'career',
       check:function(p){ return (p.nationalTeamCallups||0)>=2; } },
     { id:'one_club_man', name:'원클럽맨', desc:'은퇴할 때까지 데뷔 팀에서만 활약한다.', position:'any', scope:'retire',
-      check:function(p){ return (p.tradeCount||0)===0 && !!p.team; } },
+      check:function(p){ return isOneClubMan(p); } },
     { id:'journeyman_path', name:'저니맨의 여정', desc:'커리어 동안 3회 이상 트레이드된다.', position:'any', scope:'career',
       check:function(p){ return (p.tradeCount||0)>=3; } },
     { id:'rich_player', name:'몸값의 정점', desc:'통산 총수입 350억을 넘긴다.', position:'any', scope:'career',
@@ -1771,7 +2035,13 @@
     var mvpSeasons=(player.awardsAll||[]).filter(function(a){ return a.name==='정규시즌 MVP'; }).length;
     if(mvpSeasons>=3) traits.push('리그를 지배한 선수');
     if((player.tradeCount||0)>=3) traits.push('저니맨 기질');
-    if((player.teamTenureYears||0)>=10) traits.push('원클럽맨');
+    // Same isOneClubMan() definition the achievement uses — previously this trait only checked
+    // teamTenureYears>=10, so a player who left and later returned to a long second stint (or
+    // simply had an untracked FA/negotiation move) could show "원클럽맨" here while the
+    // achievement disagreed. A long tenure that doesn't clear the true bar still gets its own
+    // honest label instead of just silently not appearing.
+    if(isOneClubMan(player)) traits.push('원클럽맨');
+    else if((player.teamTenureYears||0)>=8) traits.push('프랜차이즈 베테랑');
     if((player.severeInjuryCount||0)>=3) traits.push('부상과 싸운 커리어');
     if((player.fanApproval||50)>=85) traits.push('팬들의 영원한 사랑');
     if(traits.length===0) traits.push('묵묵히 제 몫을 한 선수');
@@ -1854,6 +2124,42 @@
     }
     return player.statCapRoll[key];
   }
+  // 성장 속도·플레이 스타일 차별화 (Phase 2 Item 9): 그동안 일반 성장 채널은 아키타입과 무관하게
+  // growthKeys 전체에서 균등하게 스탯을 뽑았다 — 파워형 선수도 매 시즌 스피드/수비가 조금씩 자라,
+  // 커리어가 쌓이면 20-20/30-30/40-40/50도루 같은 시즌이 흔해지는 원인이었다. 이제 일반 채널도
+  // ARCHETYPE_GROWTH_BIAS(65%) 확률로 "이 선수 아키타입의 주력 스탯" 쪽에서만 뽑고, 주력이 아닌
+  // 스탯은 nonFocusStatCap보다 눈에 띄게 낮은 OFF_ARCHETYPE_STAT_CAP으로 별도 관리한다. mental은
+  // 모든 아키타입에서 범용으로 중요하게 쓰이므로("평정심이 모든 공식에 관여") 이 페널티에서 예외.
+  // 여러 스탯을 고루 키우고 싶다면 애초에 올라운드형(또는 여러 스탯을 아우르는 특성화 루트)을
+  // 고르는 것이 유일한 "하이브리드 성장 특별 루트"다 — 그 아키타입의 primary 자체가 넓기 때문에
+  // 이 페널티를 거의 받지 않는다.
+  var ARCHETYPE_GROWTH_BIAS = 0.65;
+  var OFF_ARCHETYPE_STAT_CAP_MIN = 52, OFF_ARCHETYPE_STAT_CAP_MAX = 68;
+  function pickGrowthKey(player, growthKeys){
+    var arch=archetypeInfo(player);
+    var primaries=(arch && arch.primary) ? arch.primary.filter(function(k){ return growthKeys.indexOf(k)>-1; }) : [];
+    if(primaries.length && Math.random()<ARCHETYPE_GROWTH_BIAS) return pick(primaries);
+    return pick(growthKeys);
+  }
+  function offArchetypeStatCap(player, key){
+    if(!player.offArchCapRoll) player.offArchCapRoll={};
+    if(player.offArchCapRoll[key]===undefined){
+      var bonus=(typeof potentialGradeInfo==='function' && player.potentialGrade) ? (potentialGradeInfo(player).nonFocusBonus||0) : 0;
+      player.offArchCapRoll[key]=randInt(OFF_ARCHETYPE_STAT_CAP_MIN, OFF_ARCHETYPE_STAT_CAP_MAX)+bonus;
+    }
+    return player.offArchCapRoll[key];
+  }
+  // Which cap applies to a stat when it's picked by the GENERAL growth channel (never the
+  // dedicated focus pass, which always uses effectiveFocusCap instead): a stat inside the
+  // player's own archetype identity still gets the familiar generous nonFocusStatCap band,
+  // a stat outside it is pulled down to the much tighter off-archetype band, and mental is
+  // always exempt from the penalty.
+  function archetypeAwareGrowthCap(player, key){
+    if(key==='mental') return nonFocusStatCap(player, key);
+    var arch=archetypeInfo(player);
+    var isPrimary=!!(arch && arch.primary && arch.primary.indexOf(key)>-1);
+    return isPrimary ? nonFocusStatCap(player, key) : offArchetypeStatCap(player, key);
+  }
   function ageGrowthAttemptTaper(age){
     if(age===undefined || age===null) return 1;
     if(age<=30) return 1;
@@ -1874,6 +2180,11 @@
       var current=p.stats[key];
       if(current>=cap) return; // already at or past this channel's ceiling — no further growth from here
       var successChance=clamp(1-(current-55)/70+(chanceBonus||0)+ageGrowthBonus(p.age), 0.12, 1);
+      // 75 이상 구간의 성장 감쇠를 한층 더 강하게 (Phase 2 Item 9) — 기존 곡선은 55부터 완만하게만
+      // 꺾여서 70대 후반~80대 스탯도 여전히 잘 자랐다. 75를 넘는 구간부터 추가 페널티를 얹어, 그
+      // 위로는 확률이 눈에 띄게 더 가파르게 떨어지도록 한다. 55~75 구간의 기존 밸런스(및 그걸 전제로
+      // 한 회귀 테스트들)는 이 조건 밖이라 그대로 유지된다.
+      if(current>=75) successChance=clamp(successChance-(current-75)*0.018, 0.04, 1);
       if(Math.random()>=successChance) return; // growth attempt wasted — diminishing returns near the ceiling
     }
     p.stats[key]=roundClamp(p.stats[key]+delta, 10, cap);
@@ -1946,6 +2257,85 @@
     { id:'overseas_bound', label:'해외 진출', desc:'해외 리그 진출을 목표로 커리어를 쌓는다' },
     { id:'iron_man', label:'장수 선수', desc:'부상 없이 오래도록 그라운드를 지킨다' }
   ];
+  // 커리어 목표 실기능화 (2026-09): 선택한 목표가 실제로 (1) 진행률로 추적되고, (2) 특정 카테고리/
+  // 태그의 시즌 이벤트가 조금 더 자주 뽑히도록 가중치를 받고, (3) 진행 중 최초 달성 시 한 번 하이라이트/
+  // 팬 지지도 보상을 받고, (4) 은퇴 화면에서 달성 여부로 평가받도록 연결한다. 목표를 안 고르거나(구
+  // 세이브) 기본값(franchise_star)이어도 완전히 동작 — 새 필드는 전부 기본값 백필 대상.
+  var CAREER_GOAL_EVENT_AFFINITY = {
+    franchise_star:{ categories:['team'] },
+    champion_hunter:{ categories:['team'], tags:['postseason','clutch'] },
+    record_chaser:{ categories:['performance'] },
+    national_team_star:{ categories:['national_team'] },
+    overseas_bound:{ tags:['overseas'] },
+    iron_man:{ categories:['health'] }
+  };
+  function eventMatchesGoalAffinity(e, player){
+    var goal = player && player.careerGoal, aff = goal && CAREER_GOAL_EVENT_AFFINITY[goal];
+    if(!aff) return false;
+    if(aff.categories && aff.categories.indexOf(e.category)>-1) return true;
+    if(aff.tags && e.tags && e.tags.some(function(t){ return aff.tags.indexOf(t)>-1; })) return true;
+    return false;
+  }
+  // Weighted random index pick — general helper, not goal-specific, used so a goal-matching
+  // major event is meaningfully MORE likely to be the one manual choice shown this season
+  // without ever making non-matching events impossible (every event must stay reachable).
+  function weightedPickIndex(weights){
+    var total=weights.reduce(function(a,b){ return a+b; },0);
+    if(total<=0) return 0;
+    var r=Math.random()*total;
+    for(var i=0;i<weights.length;i++){ r-=weights[i]; if(r<=0) return i; }
+    return weights.length-1;
+  }
+  function recordKingTitleCount(player){
+    var names={};
+    BATTER_LEADERBOARD_CATS.concat(PITCHER_LEADERBOARD_CATS).forEach(function(c){ if(c.award) names[c.award]=true; });
+    return (player.awardsAll||[]).filter(function(a){ return names[a.name]; }).length;
+  }
+  // Real, always-recomputed progress (0-100) + a plain-language status line + an achieved
+  // boolean used by the retirement-screen evaluation. Nothing here is cached/persisted —
+  // it is derived purely from data the game already tracks (plus injuryCount/overseasMoveAchieved,
+  // two small new fields), so it can never drift out of sync and needs no migration beyond
+  // backfilling those two source fields.
+  function careerGoalProgress(player){
+    var goal = player.careerGoal || 'franchise_star';
+    var years = player.careerYears||0;
+    var pct=0, statusText='', achieved=false;
+    if(goal==='franchise_star'){
+      var moves=(player.tradeCount||0)+(player.faMoveCount||0)+(player.negotiationMoveCount||0)+(player.secondDraftCount||0);
+      if(moves>0){
+        pct = clamp(Math.round(((player.teamTenureYears||0)/8)*50), 0, 49);
+        statusText = '다른 팀으로 이적한 이력이 있어 원클럽맨 목표와는 멀어졌습니다.';
+      } else {
+        pct = clamp(Math.round(((player.teamTenureYears||0)/8)*100), 0, 100);
+        statusText = pct>=100 ? '원클럽맨으로 인정받을 정착 기간을 채웠습니다.' : (player.team ? player.team.name+' — '+teamTenureLabel(player) : '아직 소속팀이 없습니다.');
+      }
+      achieved = isOneClubMan(player);
+    } else if(goal==='champion_hunter'){
+      pct = clamp((player.champCount||0)*60 + (player.playoffCount||0)*10, 0, 100);
+      statusText = (player.champCount||0)>0 ? '한국시리즈 우승 '+player.champCount+'회를 경험했습니다.' : ((player.playoffCount||0)>0 ? '포스트시즌 진출 '+player.playoffCount+'회, 우승은 아직입니다.' : '아직 포스트시즌 무대를 밟지 못했습니다.');
+      achieved = (player.champCount||0)>0;
+    } else if(goal==='record_chaser'){
+      var rk=recordKingTitleCount(player);
+      pct = clamp(rk*25, 0, 100);
+      statusText = rk>0 ? '개인 타이틀 '+rk+'회 획득했습니다.' : '아직 리그 개인 타이틀이 없습니다.';
+      achieved = rk>=1;
+    } else if(goal==='national_team_star'){
+      var callups=player.nationalTeamCallups||0;
+      pct = clamp(callups*20 + (player.militaryExempt?20:0), 0, 100);
+      statusText = callups>0 ? ('국가대표 발탁 '+callups+'회'+(player.militaryExempt?' · 국제대회 메달 획득':'')) : '아직 국가대표 발탁 경험이 없습니다.';
+      achieved = callups>=2;
+    } else if(goal==='overseas_bound'){
+      pct = player.overseasMoveAchieved ? 100 : (player.overseasInterest ? 55 : 15);
+      statusText = player.overseasMoveAchieved ? '해외 리그 진출에 성공했습니다.' : (player.overseasInterest ? '해외 구단의 관심을 받고 있습니다.' : '아직 해외 진출 기회를 잡지 못했습니다.');
+      achieved = !!player.overseasMoveAchieved;
+    } else if(goal==='iron_man'){
+      var healthyRatio = years>0 ? Math.max(0, 1-((player.injuryCount||0)/years)) : 1;
+      pct = clamp(Math.round(healthyRatio*60 + Math.min(years,15)/15*40), 0, 100);
+      statusText = years+'시즌 중 부상 이탈 '+(player.injuryCount||0)+'회입니다.';
+      achieved = years>=12 && (player.injuryCount||0)<=Math.ceil(years*0.2);
+    }
+    return { goal:goal, pct:pct, statusText:statusText, achieved:achieved };
+  }
   // Step 6: simulation-mode toggle. 현실형(기본값)은 이 토글이 생기기 전과 완전히 동일한 결과를
   // 내도록 시뮬레이션 함수 곳곳의 dramaMult를 1로 유지한다 — 드라마형만 변동폭/부상/성장 돌파구를
   // 키운다.
@@ -2095,10 +2485,20 @@
   // "strength" (its own momentum-like inertia, so a club reads as a real contender or doormat for
   // a few years running rather than a brand new random number every season) plus the player's own
   // small marginal contribution to their OWN team's result.
+  // Item 27: a team's identity nudges its baseline strength — a bigger-market, win-now club tends
+  // to field a stronger roster than a small-market rebuilding one, though never so hard that the
+  // random roll (still the dominant term) can't produce a scrappy small-market contender or a
+  // disappointing big-market team; this is a bias, not a guarantee.
+  function teamStrengthBias(team){
+    var bias=0;
+    if(team.marketTier==='big') bias+=0.18; else if(team.marketTier==='small') bias-=0.12;
+    if(team.philosophy==='win_now') bias+=0.10; else if(team.philosophy==='rebuild') bias-=0.10;
+    return bias;
+  }
   function ensureTeamStrength(){
     if(!state.teamStrength){
       state.teamStrength={};
-      TEAMS.forEach(function(t){ state.teamStrength[t.name]=rand(-1,1); });
+      TEAMS.forEach(function(t){ state.teamStrength[t.name]=clamp(rand(-1,1)+teamStrengthBias(t), -1, 1); });
     }
   }
   // 2026-09 redesign: a real round-robin schedule instead of rolling each team's season total
@@ -2120,14 +2520,31 @@
   }
   // KBO-style top-5 ladder: 와일드카드(4위 vs 5위) → 준플레이오프(3위 vs 승자) →
   // 플레이오프(2위 vs 승자) → 한국시리즈(1위 vs 승자). rows must already be sorted by rank.
-  function simulatePostseasonBracket(rows){
+  // Item 30: returns round-by-round detail (not just the bare champion name) so the player can see
+  // exactly how their own team's postseason run played out. playerTeamName/strategyBias are
+  // optional trailing params — omitted (as every pre-Item-30 call site/test does), strategyBias
+  // defaults to 0 and every series resolves off the untouched seed pct, so the win/loss outcome
+  // distribution is bit-for-bit identical to the pre-Item-30 formula; only the RETURN SHAPE changed
+  // (a string before -> {champion, rounds} now), which is why the one caller and the one test that
+  // read the return value both had to be updated alongside this function.
+  function simulatePostseasonBracket(rows, playerTeamName, strategyBias){
     var seeds=rows.slice(0,5);
-    function playSeries(a,b){ return Math.random()<seriesWinProb(a.pct,b.pct) ? a : b; }
-    var wc=playSeries(seeds[3], seeds[4]);
-    var semi=playSeries(seeds[2], wc);
-    var po=playSeries(seeds[1], semi);
-    var champion=playSeries(seeds[0], po);
-    return champion.team;
+    var rounds=[];
+    function playSeries(round, a, b){
+      var pA=a.pct, pB=b.pct;
+      if(strategyBias && playerTeamName){
+        if(a.team===playerTeamName) pA+=strategyBias;
+        else if(b.team===playerTeamName) pB+=strategyBias;
+      }
+      var winner = Math.random()<seriesWinProb(pA,pB) ? a : b;
+      rounds.push({round:round, teamA:a.team, teamB:b.team, winner:winner.team});
+      return winner;
+    }
+    var wc=playSeries('wildcard', seeds[3], seeds[4]);
+    var semi=playSeries('semifinal', seeds[2], wc);
+    var po=playSeries('playoff', seeds[1], semi);
+    var champion=playSeries('koreanseries', seeds[0], po);
+    return { champion:champion.team, rounds:rounds };
   }
   function simulateLeagueStandings(player, perf){
     ensureTeamStrength();
@@ -2138,7 +2555,11 @@
     // NOT touch the persistent state.teamStrength, so it never compounds across seasons.
     var effStrength={};
     TEAMS.forEach(function(t){
-      state.teamStrength[t.name]=clamp(state.teamStrength[t.name]+rand(-0.15,0.15), -1, 1);
+      // Item 27: a gentle year-over-year pull back toward the team's own identity baseline, on top
+      // of the existing random walk — a big-market win-now club that had a down season tends to
+      // reinvest and bounce back; a small-market rebuilding club's random hot streak fades faster.
+      var identityPull=teamStrengthBias(t)*0.04;
+      state.teamStrength[t.name]=clamp(state.teamStrength[t.name]+rand(-0.15,0.15)+identityPull, -1, 1);
       var s=state.teamStrength[t.name];
       if(player.team && t.name===player.team.name) s=clamp(s+clamp(perf||0,-1,1)*0.15, -1.3, 1.3);
       effStrength[t.name]=s;
@@ -2183,7 +2604,14 @@
     var totalWins=finalRows.reduce(function(s,r){return s+r.wins;},0);
     var totalLosses=finalRows.reduce(function(s,r){return s+r.losses;},0);
     if(totalWins!==totalLosses) console.error('league win/loss mismatch', totalWins, totalLosses);
-    var championTeam=simulatePostseasonBracket(finalRows);
+    // Item 30: a pending postseason-prep strategy choice (set by the postseason_strategy_prep
+    // event, if the player took it this season) nudges series win probability specifically for
+    // series involving the player's own team. Consumed and cleared here regardless of outcome —
+    // it's a one-season prep effort, never carried over.
+    var strategyBias = (player.pendingPostseasonStrategy && player.pendingPostseasonStrategy.bias) || 0;
+    var bracketResult=simulatePostseasonBracket(finalRows, player.team?player.team.name:null, strategyBias);
+    if(player.pendingPostseasonStrategy) player.pendingPostseasonStrategy=null;
+    var championTeam=bracketResult.champion;
     // this season's final ranks become next season's "previous" baseline
     state.teamPrevRank={}; finalRows.forEach(function(r){ state.teamPrevRank[r.team]=r.rank; });
     if(!player.team) return null;
@@ -2192,7 +2620,8 @@
     return {
       rank:myRow.rank, wins:myRow.wins, losses:myRow.losses,
       postseason:myRow.rank<=5, champion:championTeam===player.team.name,
-      rows:finalRows, snapshots:snapshots, myTeamRank:myRow.rank
+      rows:finalRows, snapshots:snapshots, myTeamRank:myRow.rank,
+      bracketRounds:bracketResult.rounds
     };
   }
 
@@ -2247,9 +2676,12 @@
     if(focusKey){
       for(var fi=0; fi<4; fi++) applyPermanentStatDelta(player, focusKey, 1, 0.35, effectiveFocusCap(player, focusKey));
     }
-    for(var gi=0; gi<10; gi++){
-      var gKey=pick(growthKeys);
-      var gCap=(focusKey && gKey===focusKey) ? effectiveFocusCap(player, focusKey) : nonFocusStatCap(player, gKey);
+    // 2군 성장은 1군과 별도로 튜닝한다 (Phase 2 Item 9): 시도 횟수를 10->8로 살짝 낮춰 "2군은 아직
+    // 다듬어지는 단계"라는 페이스 차이를 주되, 아키타입 편향/오프-아키타입 상한은 1군과 동일한 규칙을
+    // 그대로 적용해 2군에서부터 이미 아키타입 정체성이 흐려지는 일이 없도록 한다.
+    for(var gi=0; gi<8; gi++){
+      var gKey=pickGrowthKey(player, growthKeys);
+      var gCap=(focusKey && gKey===focusKey) ? effectiveFocusCap(player, focusKey) : archetypeAwareGrowthCap(player, gKey);
       applyPermanentStatDelta(player, gKey, 1, 0, gCap);
     }
     return { line:line, score:score };
@@ -2274,7 +2706,11 @@
       return { outcome:'callup', firstDebut:firstDebut };
     }
     player.futuresYears=(player.futuresYears||0)+1;
-    var stuck = player.futuresYears>=FUTURES_CALLUP_YEARS_LIMIT || player.age>=FUTURES_RELEASE_AGE;
+    // Item 28 (2026-09, "2차드래프트 현실성"): 입단 1~3년차 선수는 방출/2차드래프트 위험에서 완전히
+    // 제외된다 — 실제 KBO 보호선수 규정과 비슷한 취지다. 지금 구조에서는 age/futuresYears 조합상
+    // (둘 다 careerYears와 함께 오르므로) 사실상 항상 자동으로 성립하지만, 그 관계가 앞으로 바뀌어도
+    // 이 보호가 조용히 깨지지 않도록 careerYears 조건을 명시적으로 고정해 둔다.
+    var stuck = player.careerYears>3 && (player.futuresYears>=FUTURES_CALLUP_YEARS_LIMIT || player.age>=FUTURES_RELEASE_AGE);
     if(!stuck) return { outcome:'stay' };
     var leagueYear=militaryLeagueYear(player);
     if(isSecondDraftYear(leagueYear)){
@@ -2282,58 +2718,137 @@
       if(picked){
         var round=randInt(1,4);
         var bonus=[0,40000,30000,20000,10000][round]||10000;
-        var newTeam=TEAMS[randInt(0,TEAMS.length-1)];
+        // The whole point of a 2차 드래프트 is landing on a DIFFERENT team — the original club
+        // just released this player, so they can never be re-picked by that same club. Exclude
+        // the current team from the candidate pool before picking (2026-09, "2차 드래프트 기존
+        // 팀 재지명 방지" fix); with 10 teams in TEAMS this pool is never empty, but guard the
+        // degenerate case anyway rather than ever silently picking the current team.
+        var candidates=TEAMS.filter(function(t){ return !player.team || t.name!==player.team.name; });
+        if(!candidates.length) return { outcome:'stay' }; // no other team available — stay another year rather than error
+        var newTeam=candidates[randInt(0,candidates.length-1)];
         return { outcome:'seconddraft', round:round, bonus:bonus, team:newTeam };
       }
       return { outcome:'undrafted' };
+    }
+    // Item 28: a player who has already been through at least one 2차드래프트 before, and is STILL
+    // stuck years later without ever earning a 1군 chance at their new club, faces a real risk
+    // their career simply ends here — an endless "한 시즌 더" for someone the league has already
+    // passed over once wouldn't carry any real stakes. A first-timer never hits this branch (their
+    // own 2차드래프트 chance two years out is still ahead of them) — only a repeat case can.
+    if((player.secondDraftCount||0)>=1 && Math.random()<0.35){
+      return { outcome:'careerEndingRelease' };
     }
     return { outcome:'stuck' };
   }
 
   /* ================= Phase 15: rival player ================= */
-  function rollRivalBias(){ return rand(-1,1); } // this career's rival starts consistently a bit above or below the player, kept for the whole career
-  function createRival(player){
-    return { name:randomName(), position:player.position, subrole:player.subrole, bias:rollRivalBias(), scoreLog:[], lineLog:[], careerScore:0, years:0 };
+  // Item 26 (2026-09, "라이벌 시스템 독립화"): the rival used to be nothing but
+  // playerScore*(1+bias)*rand() — a shadowy reflection of the PLAYER's own season, not a real
+  // competitor. Redesigned so the rival now carries its own age, OVR, potential ceiling and
+  // injury history, and advances through its own simplified age-curve growth/aging/injury/
+  // retirement roll every season (advanceRivalCareer below) — completely independent of how the
+  // player's own season went. `playerScore` stays a parameter of advanceRival only so the existing
+  // call site in finalizeSeasonEvents doesn't need to change; it is otherwise unused.
+  function rollRivalBias(){ return rand(-1,1); } // no longer drives scoring — kept as a harmless flavor field on old/new rival objects.
+  function rivalPotentialCeiling(grade){
+    var g=POTENTIAL_GRADES.filter(function(x){ return x.id===grade; })[0] || POTENTIAL_GRADES[1];
+    // A rival's OVR ceiling sits a bit below its potential grade's single-stat focus cap — a
+    // weighted overall composite is always somewhat lower than any one maxed stat, the same
+    // relationship the player's own OVR has to their focusStatCap.
+    return randInt(Math.max(45, g.focusCapMin-8), Math.max(50, g.focusCapMax-6));
   }
-  // The rival is never actually simulated pitch-by-pitch — just given a plausible season score
-  // each year, loosely tracking the PLAYER's own performance (so a great league-wide season for
-  // the player also tends to be a competitive year around the league generally) plus their fixed
-  // bias and their own independent luck.
+  function createRival(player){
+    var grade=rollPotentialGrade();
+    return {
+      name:randomName(), position:player.position, subrole:player.subrole,
+      bias:rollRivalBias(), scoreLog:[], lineLog:[], careerScore:0, years:0,
+      age:player.age, potentialGrade:grade, ovrCeiling:rivalPotentialCeiling(grade),
+      ovr:randInt(28,40), severeInjuryCount:0, retired:false,
+      retirementAgeCap:randInt(RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX),
+      team: pick(TEAMS).name
+    };
+  }
+  // A simplified, single-scalar analogue of the player's own age-based growth/aging curve — the
+  // rival is never simulated stat-by-stat, so this collapses to one OVR delta per season. Headroom
+  // toward the rival's own ceiling tapers growth the same way effectiveFocusCap/nonFocusStatCap
+  // tapers the player's, so a rival doesn't just sail past their own rolled potential either.
+  function rivalSeasonDelta(rival){
+    var headroom=clamp(rival.ovrCeiling-rival.ovr, -15, 40);
+    var headroomMult=clamp(headroom/18, -0.5, 1.2);
+    var age=rival.age, curveBase;
+    if(age<=23) curveBase=rand(2.5,5.5);
+    else if(age<=27) curveBase=rand(1.0,3.2);
+    else if(age<=30) curveBase=rand(-0.5,1.8);
+    else if(age<=34) curveBase=rand(-2.2,0.8);
+    else if(age<=37) curveBase=rand(-4.0,-0.8);
+    else curveBase=rand(-6.5,-2.5);
+    return curveBase*Math.max(0.15, headroomMult);
+  }
+  // Advances the rival's own independent career by exactly one season: age, OVR (growth/aging),
+  // an independent injury roll, occasional (cosmetic) team movement, and a two-tier retirement
+  // check that mirrors the player's own Item 25 system (a per-rival hard cap plus a probabilistic
+  // age/OVR/injury-based roll from RETIREMENT_PROBABILISTIC_AGE) — but with its own RNG draws and
+  // its own independently-rolled hard cap, never the player's.
+  function advanceRivalCareer(rival){
+    if(rival.retired) return;
+    rival.age+=1;
+    rival.ovr=clamp(Math.round(rival.ovr+rivalSeasonDelta(rival)), 15, 99);
+    if(Math.random()<0.10){
+      rival.severeInjuryCount+=1;
+      rival.ovr=clamp(rival.ovr-randInt(2,5), 15, 99);
+    }
+    if(Math.random()<0.10) rival.team=pick(TEAMS).name; // FA/trade flavor only — no mechanical effect on score
+    if(rival.age>=rival.retirementAgeCap){
+      rival.retired=true;
+    } else if(rival.age>=RETIREMENT_PROBABILISTIC_AGE){
+      var yearsOver=rival.age-RETIREMENT_PROBABILISTIC_AGE;
+      var ovrFactor=clamp((66-rival.ovr)/66, -0.3, 0.6);
+      var injuryFactor=clamp(rival.severeInjuryCount*0.05, 0, 0.25);
+      var chance=clamp(0.06*yearsOver+ovrFactor*0.3+injuryFactor, 0.02, 0.8);
+      if(Math.random()<chance) rival.retired=true;
+    }
+  }
   function advanceRival(player, playerScore){
     if(!player.rival) player.rival=createRival(player);
     var r=player.rival;
-    var score=Math.max(0, playerScore*(1+r.bias*0.18)*rand(0.8,1.2));
+    r.years+=1;
+    advanceRivalCareer(r);
+    // 2026-09: a per-season stat line, so the rival reads as an actual competitor putting up real
+    // numbers each year instead of just an abstract cumulative score — now driven by the rival's
+    // own tracked OVR (rivalStatLine below) rather than re-derived from a score that already had
+    // its own independent random multiplier applied.
+    var synth={ position:r.position, subrole:r.subrole, stats:{} };
+    statList(r.position).forEach(function(s){ synth.stats[s.key]=r.ovr; });
+    var score = r.retired ? 0 : Math.max(0, expectedSeasonScore(synth)*rand(0.85,1.15));
     r.scoreLog.push(score);
     r.careerScore+=score;
-    r.years+=1;
-    // 2026-09: a per-season stat line, so the rival reads as an actual competitor putting up
-    // real numbers each year instead of just an abstract cumulative score. rivalStatLine reuses
-    // expectedStatLine's deterministic formulas via the same score<->overall relationship
-    // expectedSeasonScore/computePerf already use, so it stays consistent with everything else
-    // without needing to actually simulate the rival's season pitch-by-pitch.
-    r.lastLine=rivalStatLine(r, score);
-    r.lineLog.push({year:player.careerYears, line:r.lastLine});
+    r.lastLine = r.retired ? null : rivalStatLine(r, score);
+    if(r.lastLine) r.lineLog.push({year:player.careerYears, line:r.lastLine});
     return r;
   }
   function rivalStatLine(rival, score){
     var ovrEquiv;
-    if(rival.position==='batter'){
-      ovrEquiv = 30 + (score-88)/1.80;
-    } else if(rival.subrole==='선발'){
-      ovrEquiv = 30 + (score-19)/2.66;
-    } else if(rival.subrole==='마무리'){
-      ovrEquiv = 30 + (score-12)/2.17;
+    if(rival.ovr!==undefined){
+      // The normal path since Item 26 — the rival's own independently-tracked OVR is the single
+      // source of truth for its stat line, so the line always matches the career narrative.
+      ovrEquiv=clamp(Math.round(rival.ovr), 15, 99);
     } else {
-      ovrEquiv = 30 + (score-14)/2.11; // 불펜, and old saves with no subrole recorded
+      // Fallback for any caller that only has a raw score and no independent ovr (e.g. an old save
+      // whose rival hasn't been migrated yet) — approximate an ovr from the score using the same
+      // score<->overall relationship expectedSeasonScore uses, exactly as this worked before Item 26.
+      if(rival.position==='batter') ovrEquiv = 30 + (score-88)/1.80;
+      else if(rival.subrole==='선발') ovrEquiv = 30 + (score-19)/2.66;
+      else if(rival.subrole==='마무리') ovrEquiv = 30 + (score-12)/2.17;
+      else ovrEquiv = 30 + (score-14)/2.11; // 불펜, and old saves with no subrole recorded
+      ovrEquiv = clamp(Math.round(ovrEquiv), 15, 99);
     }
-    ovrEquiv = clamp(Math.round(ovrEquiv), 15, 99);
     var synth = { position:rival.position, subrole:rival.subrole, isDH:false, stats:{} };
     statList(rival.position).forEach(function(s){ synth.stats[s.key]=ovrEquiv; });
     return expectedStatLine(synth);
   }
   function rivalLineSummary(rival){
     var l=rival.lastLine;
-    if(!l) return '';
+    if(!l) return rival.retired ? '이미 은퇴했습니다.' : '';
     if(rival.position==='batter') return '타율 '+formatAvg(l.avg)+', 홈런 '+l.hr+'개, 타점 '+l.rbi+'개';
     if(rival.subrole==='마무리') return '평균자책점 '+l.era.toFixed(2)+', 세이브 '+l.saves+'개';
     if(rival.subrole==='불펜') return '평균자책점 '+l.era.toFixed(2)+', 홀드 '+l.holds+'개';
@@ -2562,14 +3077,22 @@
         우승:championships, 누적기록:recordScore, 수상신기록:awardsScore }
     };
   }
-  // Percentile against every OTHER archived career this browser has ever recorded — grows more
-  // meaningful the more the player has played, with no server or fixed reference table needed.
+  // Percentile against every archived career this browser has ever recorded (including this one,
+  // already archived by the time this runs) — grows more meaningful the more the player has played,
+  // with no server or fixed reference table needed.
+  // Item 12 fix (2026-09): this used to return "% of archived careers at or below this score" and
+  // the caller printed it directly as "상위 X%" (top X%) — so the single BEST career ever recorded
+  // showed "상위 100%", the exact opposite of what "top" should mean. Now returns rank-based info
+  // so "top X%" is small for an elite career and close to 100 for a weak one, plus a soleComparison
+  // flag so a 1-career archive doesn't produce a meaningless "상위 100%" at all.
   function legacyPercentile(score){
     var arch=loadArchive();
     var scores=arch.map(function(r){ return r.legacyScore||0; });
-    if(scores.length===0) return null;
-    var below=scores.filter(function(s){ return s<=score; }).length;
-    return clamp(Math.round((below/scores.length)*1000)/10, 0.1, 100);
+    var totalN=scores.length;
+    if(totalN===0) return null;
+    var rank=scores.filter(function(s){ return s>score; }).length+1; // 1 = best-ever
+    var topPct=clamp(Math.round((rank/totalN)*1000)/10, 0.1, 100);
+    return { rank:rank, total:totalN, topPct:topPct, soleComparison: totalN<=1 };
   }
   // Tiny inline SVG hexagon radar chart — no charting library needed. `axes` is an array of
   // {label, value} with value already 0-100 normalized.
@@ -2778,11 +3301,13 @@
       prompt:function(p){ return '트레이드 루머가 돌고 있습니다. 구단에 입장을 전할 기회가 주어집니다.'; },
       choices:[
         { label:'새 팀에서 재도약을 원한다고 밝힌다', resolve:function(p, ctx){
-            p.pendingTradeRequest=true;
+            // Item 24: 한 번의 선택으로 곧장 트레이드가 확정되지 않는다 — 위험도만 쌓인다.
+            p.tradeRiskLevel=(p.tradeRiskLevel||0)+40;
             adjustFan(p, -4);
-            return '이적 의사를 밝혔습니다. 시즌 후 새로운 팀을 찾게 될 수도 있습니다.';
+            return '이적 의사를 밝혔습니다. 구단 내에서 트레이드 가능성이 조금씩 거론되기 시작합니다.';
           }},
         { label:'현재 팀에 남고 싶다고 밝힌다', resolve:function(p, ctx){
+            p.tradeRiskLevel=Math.max(0, (p.tradeRiskLevel||0)-25);
             adjustFan(p, 4);
             return '팀에 대한 애정을 밝히며 팬들의 신뢰를 얻었습니다.';
           }}
@@ -3867,7 +4392,7 @@
             ctx.injuryRiskDelta += 0.07;
             if(Math.random()<0.45){
               var bonus=randInt(800,2000);
-              p.totalEarnings=(p.totalEarnings||0)+bonus;
+              addEarnings(p, 'incentive', bonus);
               return '목표 성적을 달성하며 인센티브 '+fmtMoney(bonus)+'을 추가로 받았습니다!';
             }
             return '목표에는 닿지 못했지만 페이스를 끌어올린 경험은 값진 자산이 되었습니다.';
@@ -4277,9 +4802,9 @@
             if(Math.random()<chance){
               adjustFan(p, 10);
               p.nationalTeamCallups=(p.nationalTeamCallups||0)+1;
-              if((p.yearsToFA||0)>0) p.yearsToFA -= 1;
+              if((p.yearsToFA||0)>0) p.yearsToFA = Math.max(0, p.yearsToFA-NATIONAL_TEAM_FA_BONUS);
               p.highlights.push({year:p.careerYears, text:'WBC 대표팀에 발탁되어 태극마크를 달았습니다.'});
-              return 'WBC 대표팀에 당당히 이름을 올렸습니다! 병역 혜택은 없지만, FA 등록일수가 인정되어 자유계약 자격 시점이 1년 앞당겨졌습니다.';
+              return 'WBC 대표팀에 당당히 이름을 올렸습니다! 병역 혜택은 없지만, FA 등록일수 일부가 인정되어 자유계약 자격 시점이 조금 앞당겨졌습니다.';
             }
             adjustFan(p, 3);
             return '아쉽게 이번 WBC 대표팀 명단에는 포함되지 못했습니다.';
@@ -4300,9 +4825,9 @@
             if(Math.random()<chance){
               adjustFan(p, 8);
               p.nationalTeamCallups=(p.nationalTeamCallups||0)+1;
-              if((p.yearsToFA||0)>0) p.yearsToFA -= 1;
+              if((p.yearsToFA||0)>0) p.yearsToFA = Math.max(0, p.yearsToFA-NATIONAL_TEAM_FA_BONUS);
               p.highlights.push({year:p.careerYears, text:'프리미어12 대표팀에 발탁되어 태극마크를 달았습니다.'});
-              return '프리미어12 대표팀에 발탁되어 태극마크를 달았습니다! 병역 혜택은 없지만 FA 등록일수가 인정되어 자유계약 자격 시점이 1년 앞당겨졌습니다.';
+              return '프리미어12 대표팀에 발탁되어 태극마크를 달았습니다! 병역 혜택은 없지만 FA 등록일수 일부가 인정되어 자유계약 자격 시점이 조금 앞당겨졌습니다.';
             }
             adjustFan(p, 2);
             return '이번 프리미어12 대표팀 명단에는 포함되지 못했습니다.';
@@ -4501,11 +5026,13 @@
       prompt:function(p){ return '트레이드 마감을 앞두고 이름이 오르내리고 있습니다.'; },
       choices:[
         { label:'이적 의사를 내비친다', resolve:function(p, ctx){
-            p.pendingTradeRequest=true;
+            // Item 24: 마찬가지로 위험도 누적만 — 즉시 확정 트레이드가 아니다.
+            p.tradeRiskLevel=(p.tradeRiskLevel||0)+40;
             adjustFan(p, -3);
             return '이적 의사를 내비치며 팀 내 분위기가 술렁였습니다.';
           }},
         { label:'현재 팀에 남고 싶다고 밝힌다', resolve:function(p, ctx){
+            p.tradeRiskLevel=Math.max(0, (p.tradeRiskLevel||0)-25);
             adjustFan(p, 4);
             return '팀에 대한 애정을 밝히며 팬들의 호감을 얻었습니다.';
           }},
@@ -4584,6 +5111,37 @@
       ]
     },
     {
+      // Item 30: prospective (not retrospective, unlike postseason_defining_moment above) — fires
+      // while the team is in playoff contention BASED ON LAST SEASON'S FINISH (p.teamRank, since
+      // this season's standings haven't been simulated yet when events are chosen), and lets the
+      // player set a strategy that nudges THIS season's postseason series odds for their own team
+      // (via p.pendingPostseasonStrategy, consumed once in simulateLeagueStandings).
+      id:'postseason_strategy_prep', category:'team', importance:'major', cooldownYears:1,
+      tags:['postseason','strategy'], careerStage:['any'],
+      condition:function(p){ return !!(p.team && p.teamRank && p.teamRank<=6); },
+      prompt:function(p){ return '지난 시즌 순위(' +(p.teamRank||'')+ '위)를 감안하면 올해도 포스트시즌 경쟁이 유력합니다. 구단이 시즌 운영 방향을 묻고 있습니다.'; },
+      choices:[
+        { label:'훈련 강도를 끌어올려 포스트시즌을 정조준한다', resolve:function(p, ctx){
+            p.pendingPostseasonStrategy={bias:0.05, mode:'aggressive'};
+            var key=pickAnyStat(p);
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)+randInt(2,5);
+            adjustFan(p, 2);
+            return '팀 전체가 훈련 강도를 끌어올리며 포스트시즌을 정조준했습니다. 만약 진출한다면 더 유리한 흐름을 기대할 수 있습니다.';
+          }},
+        { label:'선수단 전체의 밸런스를 관리하며 운영한다', resolve:function(p, ctx){
+            p.pendingPostseasonStrategy={bias:0.025, mode:'balanced'};
+            ctx.statBoost.mental=(ctx.statBoost.mental||0)+randInt(1,3);
+            return '무리하지 않는 선에서 선수단 밸런스를 관리하며 시즌을 운영하기로 했습니다.';
+          }},
+        { label:'개인 컨디션 관리에만 집중한다', resolve:function(p, ctx){
+            p.pendingPostseasonStrategy=null;
+            var key3=pickAnyStat(p);
+            ctx.statBoost[key3]=(ctx.statBoost[key3]||0)+randInt(3,7);
+            return '팀 전략보다는 스스로의 컨디션 관리에 집중하며 시즌을 준비했습니다.';
+          }}
+      ]
+    },
+    {
       id:'agent_change_longterm_deal', category:'contract', importance:'major', cooldownYears:5,
       tags:['agent','contract'], careerStage:['prime','veteran'],
       condition:function(p){ return p.careerYears>=5 && (p.yearsToFA===undefined?3:p.yearsToFA)<=2; },
@@ -4607,6 +5165,38 @@
   // How long a given event stays off the table after it's been picked (manually OR
   // auto-resolved) — explicit e.cooldownYears wins, otherwise every event gets a light default
   // so nothing (old 78-event pool included) can repeat back-to-back every single season.
+  // Phase 4 (items 16-19): a lightweight visual scaffold for the event screen. Generating real
+  // illustration/photo assets isn't something this environment can do, so instead every event
+  // CATEGORY gets a small, consistent icon+color tile (inline SVG, no external asset/network
+  // fetch — nothing to lazy-load or fail to load) so the event screen reads visually instead of
+  // as plain text alone. hex2rgba/eventCategoryVisual are pure helpers with a safe fallback for
+  // any category not explicitly listed (defensive — new categories can be added to EVENT_POOL
+  // without ever crashing the visual layer).
+  var EVENT_CATEGORY_VISUAL = {
+    performance:{color:'#c9762f', icon:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 3" stroke-linecap="round"/>'},
+    health:{color:'#c1504b', icon:'<path d="M12 4v16M4 12h16" stroke-linecap="round" stroke-width="3"/>'},
+    contract:{color:'#3f74a8', icon:'<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5" stroke-linecap="round"/>'},
+    team:{color:'#4f9463', icon:'<path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6z"/>'},
+    trade:{color:'#8a63b8', icon:'<path d="M4 8h12M12 4l4 4-4 4" stroke-linecap="round"/><path d="M20 16H8m4 4l-4-4 4-4" stroke-linecap="round"/>'},
+    training:{color:'#b56f28', icon:'<rect x="2" y="10" width="4" height="4" rx="1"/><rect x="18" y="10" width="4" height="4" rx="1"/><path d="M6 12h12" stroke-width="3" stroke-linecap="round"/>'},
+    media:{color:'#358c98', icon:'<path d="M4 5h16v10H9l-4 4V5z"/>'},
+    milestone:{color:'#bb9526', icon:'<path d="M6 3v18M6 4h11l-3 4 3 4H6" stroke-linejoin="round"/>'},
+    national_team:{color:'#41649a', icon:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" fill="none"/>'},
+    default:{color:'#8a8a8a', icon:'<circle cx="12" cy="12" r="8"/>'}
+  };
+  function hex2rgba(hex, alpha){
+    var h=hex.replace('#','');
+    var r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+    return 'rgba('+r+','+g+','+b+','+alpha+')';
+  }
+  function eventCategoryVisual(category){
+    return EVENT_CATEGORY_VISUAL[category] || EVENT_CATEGORY_VISUAL.default;
+  }
+  function renderEventVisual(category){
+    var v=eventCategoryVisual(category);
+    return '<div class="event-visual" style="--ev-color:'+v.color+';--ev-color-bg:'+hex2rgba(v.color,0.16)+';">'+
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">'+v.icon+'</svg></div>';
+  }
   var DEFAULT_EVENT_COOLDOWN_YEARS = 2;
   function eventOnCooldown(e, p){
     if(!p.eventHistory || !p.eventHistory.length) return false;
@@ -4633,7 +5223,14 @@
     var minors = eligible.filter(function(e){ return e.importance!=='major'; });
 
     var manual=[];
-    if(majors.length) manual.push(majors.shift());
+    if(majors.length){
+      // 커리어 목표 실기능화: 목표와 결이 맞는(카테고리/태그 일치) 메이저 이벤트는 이번 시즌의
+      // '수동 선택' 자리를 얻을 확률이 약 2.5배 높다 — 절대 고정 당첨은 아니라서(가중치일 뿐),
+      // 목표와 무관한 이벤트도 여전히 등장할 수 있다.
+      var majorWeights = majors.map(function(e){ return eventMatchesGoalAffinity(e, p) ? 2.5 : 1; });
+      var pickIdx = weightedPickIndex(majorWeights);
+      manual.push(majors.splice(pickIdx,1)[0]);
+    }
     else if(minors.length) manual.push(minors.shift());
     var minorCount=Math.min(randInt(1,2), minors.length);
     for(var i=0;i<minorCount;i++) manual.push(minors.shift());
@@ -4913,7 +5510,12 @@
         '<div class="stat-line-grid">'+
           '<div class="stat-line-cell"><div class="v">'+d.round+'R</div><div class="l">라운드</div></div>'+
           '<div class="stat-line-cell"><div class="v">'+d.pick+'번</div><div class="l">지명 순번</div></div>'+
-          '<div class="stat-line-cell"><div class="v">'+fmtMoney(d.bonus)+'</div><div class="l">계약금</div></div>'+
+        '</div>'+
+        // Item 11 (2026-09): 계약금(입단 시 1회, addEarnings 'bonus' 버킷)과 연봉(매 시즌, 'salary'
+        // 버킷)은 완전히 다른 돈이므로 나란히 두되 라벨로 명확히 구분해서 보여준다.
+        '<div class="stat-line-grid" style="margin-top:8px;">'+
+          '<div class="stat-line-cell"><div class="v">'+fmtMoney(d.bonus)+'</div><div class="l">계약금 (입단 시 1회)</div></div>'+
+          '<div class="stat-line-cell"><div class="v">'+fmtMoney(startingSalary(d))+'</div><div class="l">첫 시즌 연봉</div></div>'+
         '</div>'+
         '<p class="lede"><span class="team-badge" style="background:'+d.team.color+';width:28px;height:28px;font-size:13px;display:inline-flex;vertical-align:middle;margin-right:8px;border-radius:6px;">'+esc(p.name[0])+'</span>'+
         '<b style="font-family:var(--font-display);font-size:18px;">'+esc(d.team.name)+'</b>가(이) '+esc(p.name)+' 선수를 지명했습니다.</p>';
@@ -4980,7 +5582,7 @@
           '<div class="pc-meta" style="margin-bottom:12px;">'+
             '<div><span>현재 위치</span><span>'+esc(rosterStatusLabel(p))+'</span></div>'+
             '<div><span>병역</span><span>'+militaryStatusLabel(p)+'</span></div>'+
-            '<div><span>계약</span><span>'+((p.yearsToFA===undefined?3:p.yearsToFA)<=0 ? 'FA 자격 취득' : 'FA까지 '+(p.yearsToFA===undefined?3:p.yearsToFA)+'년')+'</span></div>'+
+            '<div><span>계약</span><span>'+((p.contractYearsRemaining||0)>0 ? '다년계약 '+p.contractYearsRemaining+'시즌 남음' : faProgressLabel(p))+'</span></div>'+
           '</div>'+
           '<button class="btn btn-danger" style="width:100%;" data-action="ask-retire">은퇴 상담</button>'+
         '</div>' : '');
@@ -5121,6 +5723,12 @@
   function renderTabLeague(){
     var p=state.player;
     var html = '<div class="eyebrow">리그</div><h2>'+(p.team?esc(p.team.name):'소속팀')+'의 시즌</h2>';
+    // Item 27: surface the club's own financial/philosophical identity where the player already
+    // looks to check on their team — this is what actually drives the different FA/negotiation
+    // numbers they see elsewhere (teamOfferSalary/teamFAStayOffer), not just flavor text.
+    if(p.team){
+      html += '<p class="lede" style="font-size:13px;color:var(--ink-dim);">'+esc(p.team.name)+' — '+teamMarketLabel(p.team)+' · '+teamPhilosophyLabel(p.team)+' 구단</p>';
+    }
 
     if(!p.currentLeagueStandings || !p.currentLeagueStandings.length){
       html += '<p class="lede">첫 시즌을 진행하면 이곳에 리그 순위가 표시됩니다.</p>';
@@ -5143,10 +5751,14 @@
     html += '<h3 style="font-size:15px;margin-top:18px;">정규시즌 최종 순위표</h3>'+
       renderLeagueTableHtml(p.currentLeagueStandings, p.team?p.team.name:null);
 
-    var boards=buildLeagueLeaderboard(p);
+    // The current season's leaderboard was generated exactly once, at the moment that season's
+    // line was simulated (finalizeSeasonEvents), and persisted on its history entry — so this is
+    // just a read, never a fresh roll, and reloading the page shows exactly the same field.
+    var lastEntry = p.history && p.history.length ? p.history[p.history.length-1] : null;
+    var boards = lastEntry ? lastEntry.leagueBoards : null;
     if(boards){
       html += '<h3 style="font-size:15px;margin-top:18px;">개인 기록 순위</h3>'+
-        '<p class="lede" style="font-size:12px;">가상의 리그 경쟁 선수들과 비교한 이번 시즌 기록입니다.</p>'+
+        '<p class="lede" style="font-size:12px;">가상의 리그 경쟁 선수들과 비교한 이번 시즌 기록입니다. 규정 타석/이닝을 채운 기록만 순위에 반영됩니다.</p>'+
         renderLeaderboardHtml(boards);
     }
 
@@ -5217,6 +5829,20 @@
       '</div>';
     }
 
+    // Every past season's individual-record leaderboard was persisted on its own history entry
+    // when that season happened (see finalizeSeasonEvents) — this just re-displays it, so the
+    // competitors, ranks, and titles for an old season never change on a later visit.
+    var seasonsWithBoards = p.history.filter(function(h){ return h.leagueBoards; });
+    if(seasonsWithBoards.length){
+      var histRows = seasonsWithBoards.slice().reverse().map(function(h){
+        var parts = summarizeSeasonBoards(h.leagueBoards);
+        return '<tr><td>'+h.year+'년차</td><td>'+(parts.length ? esc(parts.join(', ')) : '<span style="color:var(--ink-dim);">순위권 밖</span>')+'</td></tr>';
+      }).join('');
+      html += '<hr class="divider"><h3 style="font-size:17px;">시즌별 개인 순위</h3>'+
+        '<div class="table-wrap"><table><thead><tr><th>연차</th><th>주요 순위</th></tr></thead><tbody>'+histRows+'</tbody></table></div>'+
+        '<p class="lede" style="font-size:12px;margin-top:6px;">규정 타석/이닝을 채운 해에 5위 안에 든 기록만 표시됩니다. 👑는 그 시즌 타이틀 획득을 뜻합니다.</p>';
+    }
+
     html += renderKboComparisonHtml(p, totals);
 
     $('#tab-records').innerHTML=html;
@@ -5231,18 +5857,25 @@
       var goalInfo=CAREER_GOALS.filter(function(g){ return g.id===p.careerGoal; })[0];
       var modeInfo=SIM_MODES.filter(function(m){ return m.id===p.simMode; })[0];
       if(goalInfo){
-        html += '<p class="lede" style="font-size:13px;">커리어 목표 — <b>'+esc(goalInfo.label)+'</b> · '+esc(goalInfo.desc)+
-          (modeInfo ? ' <span style="color:var(--ink-dim);">('+esc(modeInfo.label)+' 진행)</span>' : '')+'</p>';
+        var goalProgress=careerGoalProgress(p);
+        html += '<p class="lede" style="font-size:13px;margin-bottom:4px;">커리어 목표 — <b>'+esc(goalInfo.label)+'</b> · '+esc(goalInfo.desc)+
+          (modeInfo ? ' <span style="color:var(--ink-dim);">('+esc(modeInfo.label)+' 진행)</span>' : '')+'</p>'+
+          '<div style="height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-bottom:4px;">'+
+            '<div style="height:100%;width:'+goalProgress.pct+'%;background:var(--accent);"></div>'+
+          '</div>'+
+          '<p class="lede" style="font-size:12px;color:var(--ink-dim);margin-bottom:10px;">'+(goalProgress.achieved?'✅ 달성 · ':'')+esc(goalProgress.statusText)+' ('+goalProgress.pct+'%)</p>';
       }
     }
 
     if(p.teamRankHistory && p.teamRankHistory.length){
+      var totalMoves=(p.tradeCount||0)+(p.faMoveCount||0)+(p.negotiationMoveCount||0)+(p.secondDraftCount||0);
       html += '<h3 style="font-size:15px;">소속팀 이력</h3>'+
         '<div class="stat-line-grid" style="margin-bottom:8px;">'+
           '<div class="stat-line-cell"><div class="v">'+(p.champCount||0)+'</div><div class="l">한국시리즈 우승</div></div>'+
           '<div class="stat-line-cell"><div class="v">'+(p.playoffCount||0)+'</div><div class="l">포스트시즌 진출</div></div>'+
-          '<div class="stat-line-cell"><div class="v">'+(p.tradeCount||0)+'</div><div class="l">통산 이적</div></div>'+
+          '<div class="stat-line-cell"><div class="v">'+totalMoves+'</div><div class="l">통산 팀 이동</div></div>'+
         '</div>'+
+        (totalMoves>0 ? '<p class="lede" style="font-size:12px;margin:-2px 0 8px;">트레이드 '+(p.tradeCount||0)+'회 · FA 이적 '+(p.faMoveCount||0)+'회 · 협상 결렬 이적 '+(p.negotiationMoveCount||0)+'회 · 2차 드래프트 '+(p.secondDraftCount||0)+'회</p>' : '')+
         '<div class="table-wrap"><table><thead><tr><th>연차</th><th class="col-team">소속</th><th>순위</th><th>성적</th></tr></thead><tbody>'+
         p.teamRankHistory.slice().reverse().slice(0,5).map(function(row){
           return '<tr><td>'+row.year+'</td><td class="col-team">'+esc(row.team)+'</td><td>'+row.rank+'위</td><td>'+row.wins+'승 '+row.losses+'패</td></tr>';
@@ -5254,6 +5887,14 @@
             return '<tr><td>'+row.year+'</td><td class="col-team">'+esc(row.team)+'</td><td>'+row.rank+'위</td><td>'+row.wins+'승 '+row.losses+'패</td></tr>';
           }).join('')+
           '</tbody></table></div></details>' : '');
+      if(p.teamMoveHistory && p.teamMoveHistory.length){
+        html += '<details style="margin-top:8px;"><summary style="cursor:pointer;color:var(--ink-dim);font-size:13px;">이적 이력 보기 ('+p.teamMoveHistory.length+'건)</summary>'+
+          '<div class="table-wrap" style="margin-top:8px;"><table><thead><tr><th>연차</th><th>유형</th><th class="col-team">이동</th></tr></thead><tbody>'+
+          p.teamMoveHistory.slice().reverse().map(function(m){
+            return '<tr><td>'+m.year+'</td><td>'+esc(MOVE_TYPE_LABELS[m.type]||m.type)+'</td><td class="col-team">'+esc(m.from)+' → '+esc(m.to)+'</td></tr>';
+          }).join('')+
+          '</tbody></table></div></details>';
+      }
     } else {
       html += '<p class="lede" style="font-size:13px;">첫 시즌을 진행하면 이곳에 소속팀 이력이 쌓입니다.</p>';
     }
@@ -5263,7 +5904,12 @@
 
     if(p.rival && p.rival.scoreLog.length){
       var aheadOfRival = p.careerScore>=p.rival.careerScore;
+      // Item 26: the rival now runs its own independent career, so the comparison panel surfaces
+      // that directly — age, current소속(team), and retirement status — instead of only a score.
+      var rivalStatusLine = (p.rival.retired ? esc(p.rival.name)+'은(는) 이미 은퇴했습니다.'
+        : '만 '+(p.rival.age||'?')+'세 · '+esc(p.rival.team||'무소속')+' 소속으로 여전히 현역입니다.');
       html += '<hr class="divider"><h3 style="font-size:15px;">라이벌 비교 — '+esc(p.rival.name)+'</h3>'+
+        '<p class="lede" style="font-size:13px;color:var(--ink-dim);">'+rivalStatusLine+'</p>'+
         '<div class="stat-line-grid">'+
           '<div class="stat-line-cell"><div class="v">'+Math.round(p.careerScore||0)+'</div><div class="l">내 커리어 점수</div></div>'+
           '<div class="stat-line-cell"><div class="v">'+Math.round(p.rival.careerScore||0)+'</div><div class="l">'+esc(p.rival.name)+' 커리어 점수</div></div>'+
@@ -5347,10 +5993,20 @@
     '</svg>';
   }
 
-  // Step 6: fictional individual-record leaderboards. These competing players are generated
-  // fresh (not persisted to the save) whenever the tab is viewed for a season it hasn't already
-  // built a board for, cached on ephemeral `state` (never on `player`) so it never needs a
-  // migratePlayerData entry and never bloats a save file across a long career.
+  // Individual-record leaderboards. The whole point of this system (2026-09, "기록왕과 개인
+  // 순위 불일치" fix) is that the SAME generated field decides both what the 리그 탭 leaderboard
+  // shows AND which "record king" title (타격왕, 홈런왕, ...) the player actually earns —
+  // previously those were two unrelated random processes (a probability-threshold roll for the
+  // award, a freshly-regenerated fictional field for the leaderboard, re-rolled on every visit
+  // and never persisted), so a player could show up nowhere near the top of the 타점 leaderboard
+  // and still be crowned 타점왕 that season. Now the field is generated exactly ONCE, at the
+  // moment the season's own line is simulated (finalizeSeasonEvents), and is persisted onto that
+  // season's p.history entry — so a save/reload always shows the same competitors, the same
+  // ranks, and the same winners for a season that already happened. `award` names the title this
+  // category corresponds to (null for a display-only category like OPS that has no matching
+  // title); `qualify(row)` is the KBO-style plate-appearance / innings floor a row must clear to
+  // even be ranked in that category (rate stats only — counting stats like HR/타점/다승 have none,
+  // matching real KBO rules).
   var LEADERBOARD_SURNAMES=['김','이','박','최','정','강','조','윤','장','임','한','오','서','신','권','황','안','송','전','홍','유','고','문','양'];
   var LEADERBOARD_GIVEN=['도윤','서준','민준','시우','주원','지호','예준','현우','승민','재원','태양','우진','성민','준호','재현','민재','상현','동혁','건우','규현','태민','영훈','성빈','하준'];
   function randomFictionalName(used){
@@ -5359,64 +6015,140 @@
     used[name]=true;
     return name;
   }
+  var REGULATION_AB = 350;   // KBO-style 규정타석 floor used for rate-stat titles (avg/obp)
+  var REGULATION_H_AB = 300; // 최다안타왕's own slightly looser AB floor (unchanged from before)
+  var REGULATION_IP = 144;   // KBO-style 규정이닝 floor for 평균자책점왕
   var BATTER_LEADERBOARD_CATS=[
-    { key:'avg', label:'타율', higherBetter:true, format:function(v){ return formatAvg(v); }, gen:function(){ return clamp(rand(0.220,0.345),0.15,0.40); } },
-    { key:'hr', label:'홈런', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(4,42)); } },
-    { key:'rbi', label:'타점', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(28,120)); } },
-    { key:'sb', label:'도루', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(0,45)); } },
-    { key:'ops', label:'OPS', higherBetter:true, format:function(v){ return v.toFixed(3); }, gen:function(){ return clamp(rand(0.640,1.010),0.45,1.15); } }
+    { key:'avg', award:'타격왕', label:'타율', higherBetter:true, format:function(v){ return formatAvg(v); }, qualify:function(r){ return r.ab>=REGULATION_AB; } },
+    { key:'hr', award:'홈런왕', label:'홈런', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'rbi', award:'타점왕', label:'타점', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'h', award:'최다안타왕', label:'안타', higherBetter:true, format:function(v){ return String(v); }, qualify:function(r){ return r.ab>=REGULATION_H_AB; } },
+    { key:'obp', award:'출루율왕', label:'출루율', higherBetter:true, format:function(v){ return v.toFixed(3); }, qualify:function(r){ return (r.ab+(r.bb||0))>=REGULATION_AB; } },
+    { key:'runs', award:'득점왕', label:'득점', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'sb', award:'도루왕', label:'도루', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'ops', award:null, label:'OPS', higherBetter:true, format:function(v){ return v.toFixed(3); } }
   ];
   var PITCHER_LEADERBOARD_CATS=[
-    { key:'era', label:'평균자책점', higherBetter:false, format:function(v){ return v.toFixed(2); }, gen:function(){ return clamp(rand(2.40,5.60),1.4,7.5); } },
-    { key:'wins', label:'승리', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(2,18)); } },
-    { key:'k', label:'탈삼진', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(35,205)); } },
-    { key:'saves', label:'세이브', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(0,38)); } },
-    { key:'holds', label:'홀드', higherBetter:true, format:function(v){ return String(v); }, gen:function(){ return Math.round(rand(0,35)); } }
+    { key:'era', award:'평균자책점왕', label:'평균자책점', higherBetter:false, format:function(v){ return v.toFixed(2); }, qualify:function(r){ return r.ip>=REGULATION_IP; } },
+    { key:'wins', award:'다승왕', label:'승리', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'k', award:'탈삼진왕', label:'탈삼진', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'saves', award:'구원왕', label:'세이브', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'holds', award:'홀드왕', label:'홀드', higherBetter:true, format:function(v){ return String(v); } },
+    { key:'winPct', award:'승률왕', label:'승률', higherBetter:true, format:function(v){ return v.toFixed(3); }, qualify:function(r){ return (r.wins+r.losses)>=10; } }
   ];
-  // Builds (or returns the already-cached) fictional leaderboard for the player's CURRENT
-  // careerYears — regenerated only when a new season's line has been added, so repeat visits to
-  // the 리그 탭 within the same season see a stable field instead of re-rolling every render.
-  function buildLeagueLeaderboard(p){
-    if(!p.history || !p.history.length) return null;
-    if(state.leaderboardCache && state.leaderboardCache.year===p.careerYears && state.leaderboardCache.name===p.name){
-      return state.leaderboardCache.boards;
+  // A fictional rival's full season line — generated as one coherent row (h derived from ab*avg,
+  // obp/ops derived from that same row) rather than each stat category rolled independently, so
+  // e.g. a row's "안타" and "타율" can't contradict each other the way fully-independent random
+  // draws could.
+  function genFictionalBatterRow(){
+    var ab=Math.round(rand(280,560));
+    var bb=Math.round(rand(20,72));
+    var avg=clamp(rand(0.220,0.345),0.150,0.400);
+    var h=Math.round(ab*avg);
+    var slg=clamp(rand(0.350,0.620),0.300,0.750);
+    var obp=clamp((h+bb)/(ab+bb+8), 0.250,0.470);
+    return {
+      ab:ab, bb:bb, avg:avg, h:h,
+      hr:Math.round(rand(4,42)), rbi:Math.round(rand(28,120)), runs:Math.round(rand(30,100)),
+      sb:Math.round(rand(0,45)), obp:obp, ops:obp+slg
+    };
+  }
+  function genFictionalPitcherRow(){
+    var wins=Math.round(rand(2,18));
+    var losses=Math.round(rand(2,14));
+    return {
+      ip:Math.round(rand(60,190)), era:clamp(rand(2.40,5.60),1.4,7.5),
+      wins:wins, losses:losses, k:Math.round(rand(35,205)),
+      saves:Math.round(rand(0,38)), holds:Math.round(rand(0,35)),
+      winPct:(wins+losses)>0 ? wins/(wins+losses) : 0
+    };
+  }
+  // Standard "competition ranking" (1, 1, 3, 4, 4, 6, ...) — tied rows share the same rank, and
+  // the rank right after a tie-group skips ahead by however many entrants are actually tied
+  // above it. This IS the "공동 1위" handling the spec asks for: a genuine tie at the top means
+  // BOTH rows are rank 1 and (if one of them is the player) both would be awarded the title.
+  function competitionRanks(sortedRows, key){
+    var ranks=[];
+    for(var i=0;i<sortedRows.length;i++){
+      ranks.push(i>0 && sortedRows[i][key]===sortedRows[i-1][key] ? ranks[i-1] : i+1);
     }
-    var lastLine=p.history[p.history.length-1].line;
+    return ranks;
+  }
+  // Generates this season's full individual-record field ONCE — call exactly once per season
+  // (from finalizeSeasonEvents, right when that season's real `line` is known) and persist the
+  // result; never call this again later just to "refresh" a display, or the whole point of fixing
+  // the 기록왕/개인순위 mismatch is lost.
+  function generateSeasonLeagueRecords(p, line){
     var cats = p.position==='batter' ? BATTER_LEADERBOARD_CATS : PITCHER_LEADERBOARD_CATS;
     var used={};
     var fictionalRows=[];
     for(var i=0;i<24;i++){
       var row={ name:randomFictionalName(used), team:pick(TEAMS).name, isPlayer:false };
-      cats.forEach(function(c){ row[c.key]=c.gen(); });
+      var gen = p.position==='batter' ? genFictionalBatterRow() : genFictionalPitcherRow();
+      Object.keys(gen).forEach(function(k){ row[k]=gen[k]; });
       fictionalRows.push(row);
     }
     var myRow={ name:p.name, team:p.team?p.team.name:'무소속', isPlayer:true };
-    cats.forEach(function(c){ myRow[c.key]=lastLine[c.key]; });
+    var keys = p.position==='batter'
+      ? ['ab','bb','avg','h','hr','rbi','runs','sb','obp','ops']
+      : ['ip','era','wins','losses','k','saves','holds'];
+    keys.forEach(function(k){ myRow[k] = line[k]!==undefined ? line[k] : 0; });
+    if(p.position==='pitcher'){ myRow.winPct = (line.wins+line.losses)>0 ? line.wins/(line.wins+line.losses) : 0; }
     var allRows=fictionalRows.concat([myRow]);
-    var boards=cats.map(function(c){
-      var sorted=allRows.slice().sort(function(a,b){ return c.higherBetter ? b[c.key]-a[c.key] : a[c.key]-b[c.key]; });
-      var myRank=1;
-      sorted.forEach(function(r,idx){ if(r.isPlayer) myRank=idx+1; });
-      return { key:c.key, label:c.label, format:c.format, top:sorted.slice(0,5), myRank:myRank, myValue:myRow[c.key], totalField:sorted.length };
+    return cats.map(function(c){
+      var qualified=allRows.filter(function(r){ return !c.qualify || c.qualify(r); });
+      var sorted=qualified.slice().sort(function(a,b){ return c.higherBetter ? b[c.key]-a[c.key] : a[c.key]-b[c.key]; });
+      var ranks=competitionRanks(sorted, c.key);
+      var myIdx=-1;
+      sorted.forEach(function(r,idx){ if(r.isPlayer) myIdx=idx; });
+      var top=sorted.slice(0,5).map(function(r,idx){ return {name:r.name, team:r.team, isPlayer:r.isPlayer, value:r[c.key], rank:ranks[idx]}; });
+      return {
+        key:c.key, label:c.label, award:c.award, format:c.format,
+        top:top, myQualified:myIdx>-1, myRank:myIdx>-1?ranks[myIdx]:null,
+        myValue:myRow[c.key], totalField:sorted.length
+      };
     });
-    state.leaderboardCache={ year:p.careerYears, name:p.name, boards:boards };
-    return boards;
+  }
+  // The "기록왕" titles (as opposed to MVP/골든글러브/신인왕, which stay evaluation-based) go to
+  // whoever actually sits at rank 1 in this season's generated field — a genuine tie at the top
+  // still earns the title (competitionRanks gives both rows rank 1), and a category with no
+  // matching award (OPS) never grants anything.
+  function recordKingAwardsFromBoards(boards){
+    var names=[];
+    if(!boards) return names;
+    boards.forEach(function(b){
+      if(b.award && b.myRank===1) names.push(b.award);
+    });
+    return names;
   }
   function renderLeaderboardHtml(boards){
     if(!boards) return '';
     return '<div class="leaderboard-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;">'+
       boards.map(function(b){
-        var rowsHtml=b.top.map(function(r,idx){
-          return '<tr class="'+(r.isPlayer?'my-team':'')+'"><td>'+(idx+1)+'</td><td>'+esc(r.name)+'</td><td>'+b.format(r[b.key])+'</td></tr>';
+        var rowsHtml=b.top.map(function(r){
+          return '<tr class="'+(r.isPlayer?'my-team':'')+'"><td>'+r.rank+'</td><td>'+esc(r.name)+'</td><td>'+b.format(r.value)+'</td></tr>';
         }).join('');
-        var myNote = b.myRank<=5 ? '' : '<div class="lede" style="font-size:12px;margin-top:4px;">내 순위 '+b.myRank+'위 / '+b.totalField+'명 ('+b.format(b.myValue)+')</div>';
+        var myNote;
+        if(!b.myQualified) myNote='<div class="lede" style="font-size:12px;margin-top:4px;">자격 조건 미달 (규정 타석/이닝 미달) — 순위에서 제외됩니다.</div>';
+        else if(b.myRank>5) myNote='<div class="lede" style="font-size:12px;margin-top:4px;">내 순위 '+b.myRank+'위 / '+b.totalField+'명 ('+b.format(b.myValue)+')</div>';
+        else myNote='';
         // Deliberately NOT .league-table-wrap — that class forces its <table> to min-width:420px
         // for the full 10-team standings table, which would blow these narrow leaderboard cards
         // way out past their grid column and scroll the name/value columns off-screen.
-        return '<div class="mini-leaderboard-card"><div style="font-weight:600;font-size:13px;margin-bottom:4px;">'+esc(b.label)+'</div>'+
+        return '<div class="mini-leaderboard-card"><div style="font-weight:600;font-size:13px;margin-bottom:4px;">'+esc(b.label)+(b.award&&b.myRank===1?' <span style="color:var(--accent-gold,#c9962c);">👑</span>':'')+'</div>'+
           '<table style="width:100%;font-size:12px;table-layout:fixed;"><tbody>'+rowsHtml+'</tbody></table>'+myNote+'</div>';
       }).join('')+
     '</div>';
+  }
+  // Compact summary of one season's boards for the 기록 탭's "지난 시즌 개인 순위" history —
+  // only categories the player actually qualified for and finished top-5 in, so a long career's
+  // history list doesn't drown in categories the player barely touched.
+  function summarizeSeasonBoards(boards){
+    if(!boards) return [];
+    return boards.map(function(b){
+      if(!b.myQualified || b.myRank>5) return null;
+      return b.label+' '+b.myRank+'위'+(b.award&&b.myRank===1?' 👑':'');
+    }).filter(function(s){ return s; });
   }
 
   // Full 10-team standings table for the 리그 탭 — highlights the player's own team and draws a
@@ -5520,17 +6252,28 @@
     var traits=deriveTraits(p, totals);
     var html = '<div class="eyebrow">은퇴</div>'+
       '<h1>'+esc(p.name)+', 유니폼을 벗다</h1>'+
-      '<p class="lede">만 '+p.age+'세, 프로 '+p.careerYears+'년의 커리어를 마무리했습니다'+(state.forcedRetireReason==='나이'?' (노쇠화로 인한 은퇴)':state.forcedRetireReason==='방출'?' (부진으로 인한 방출 후 은퇴)':'')+'.</p>'+
+      '<p class="lede">만 '+p.age+'세, 프로 '+p.careerYears+'년의 커리어를 마무리했습니다'+(state.forcedRetireReason==='나이'?' (은퇴 연한에 따른 은퇴)':state.forcedRetireReason==='방출'?' (부진으로 인한 방출 후 은퇴)':state.forcedRetireReason==='고령'?' (노쇠화를 받아들이며 스스로 결정한 은퇴)':'')+'.</p>'+
       '<div class="stat-line-grid" style="margin:22px 0;">'+
         '<div class="stat-line-cell"><div class="v" style="font-size:26px;">'+esc(ct.title)+'</div><div class="l">커리어 평가</div></div>'+
         '<div class="stat-line-cell"><div class="v">'+fmtMoney(p.totalEarnings||0)+'</div><div class="l">통산 총수입</div></div>'+
+      '</div>'+
+      // Itemized breakdown — 연봉(1군+2군 시즌 연봉 합계) / 계약금(신인 계약금) / 인센티브, summing
+      // back to the same total shown above (addEarnings keeps the total and buckets in lockstep).
+      '<div class="stat-line-grid" style="margin:0 0 14px;">'+
+        '<div class="stat-line-cell"><div class="v" style="font-size:17px;">'+fmtMoney(p.totalSalaryEarnings||0)+'</div><div class="l">연봉 누계</div></div>'+
+        '<div class="stat-line-cell"><div class="v" style="font-size:17px;">'+fmtMoney(p.totalSigningBonus||0)+'</div><div class="l">계약금</div></div>'+
+        '<div class="stat-line-cell"><div class="v" style="font-size:17px;">'+fmtMoney(p.totalIncentiveEarnings||0)+'</div><div class="l">인센티브</div></div>'+
       '</div>';
 
     // Legacy Score card (Phase 15) — total/grade/percentile plus a 6-axis radar, mirroring the
     // reference "레거시 점수" summary. Uses computeLegacyScore, which is already run once inside
     // archivePlayer() at the moment of retirement, so the number shown here matches the archive.
     var legacy=computeLegacyScore(p);
-    var pct=legacyPercentile(legacy.total);
+    var pctInfo=legacyPercentile(legacy.total);
+    var pctCellHtml = !pctInfo ? '' :
+      (pctInfo.soleComparison ?
+        '<div class="stat-line-cell"><div class="v" style="font-size:15px;">등록된 커리어 중 1위</div><div class="l">역대 커리어 백분위</div></div>' :
+        '<div class="stat-line-cell"><div class="v">상위 '+pctInfo.topPct+'%</div><div class="l">역대 커리어 '+pctInfo.rank+'위 / '+pctInfo.total+'명</div></div>');
     var axesArr=[
       {label:'선수 가치', value:(legacy.axes.선수가치/35)*100},
       {label:'국가대표', value:(legacy.axes.국가대표/25)*100},
@@ -5543,7 +6286,7 @@
       '<div class="stat-line-grid" style="margin-bottom:6px;">'+
         '<div class="stat-line-cell"><div class="v" style="font-size:26px;">'+legacy.total+'</div><div class="l">종합 점수</div></div>'+
         '<div class="stat-line-cell"><div class="v" style="font-size:26px;">'+esc(legacy.grade)+'</div><div class="l">등급</div></div>'+
-        (pct!==null ? '<div class="stat-line-cell"><div class="v">상위 '+pct+'%</div><div class="l">역대 커리어 백분위</div></div>' : '')+
+        pctCellHtml+
         '<div class="stat-line-cell"><div class="v">'+esc(ct.title)+'</div><div class="l">포지션 태그</div></div>'+
       '</div>'+
       renderRadarSvg(axesArr)+
@@ -5555,6 +6298,18 @@
 
     if(traits.length){
       html += '<div style="margin:10px 0 4px;">'+traits.map(function(t){ return '<span class="award-pill">'+esc(t)+'</span>'; }).join('')+'</div>';
+    }
+
+    // 커리어 목표 평가 (Phase 2 Item 8) — 창단 당시 고른 목표를 최종 진행률/달성 여부로 되돌아본다.
+    if(p.careerGoal){
+      var goalInfoEnd=CAREER_GOALS.filter(function(g){ return g.id===p.careerGoal; })[0];
+      var goalProgressEnd=careerGoalProgress(p);
+      if(goalInfoEnd){
+        html += '<hr class="divider"><h3 style="font-size:17px;">커리어 목표 평가</h3>'+
+          '<p class="lede" style="font-size:14px;">목표 — <b>'+esc(goalInfoEnd.label)+'</b><br>'+
+          (goalProgressEnd.achieved ? '<span style="color:var(--accent);font-weight:700;">✅ 목표를 달성했습니다.</span> ' : '<span style="color:var(--ink-dim);">목표를 완전히 달성하지는 못했습니다.</span> ')+
+          esc(goalProgressEnd.statusText)+' (최종 진행률 '+goalProgressEnd.pct+'%)</p>';
+      }
     }
 
     html += '<hr class="divider"><h3 style="font-size:17px;">통산 기록</h3>';
@@ -5649,6 +6404,133 @@
     beginSeasonEvents();
   }
 
+  // Item 24 (2026-09), 트레이드 발생 방식 현실화: trade_rumor/trade_deadline_rumor의 "이적 의사를
+  // 밝힌다" 선택은 예전엔 곧바로 pendingTradeRequest=true를 세팅해, 시즌 하나의 선택 하나만으로 다음
+  // 계약 시점에 아무 예고/대응 기회 없이 실제 트레이드가 확정되어 버렸다. 이제 그 선택은 대신
+  // tradeRiskLevel(신뢰도/위험도)만 누적시키고, 이 값이 임계치를 넘고 최근 이적 보호기간이 끝났을
+  // 때만 별도의 "구단이 트레이드를 검토 중입니다" 게이트 이벤트가 열려 실제로 어떻게 대응할지
+  // 사용자가 직접 고른다 — 받아들이면 그제서야 기존에 이미 테스트되어 있는 pendingTradeRequest→
+  // finalizeNegotiationNarrative 트레이드 확정 경로를 그대로 탄다(이 경로 자체는 변경하지 않는다).
+  // Item 29 (2026-09, "심각한 부상·재활 현실화"): a 심각한 부상 used to be a single isolated dice
+  // roll — one stat quietly dropped and the season moved on, with no sense of an actual injury
+  // playing out. Now it kicks off a genuine multi-season arc: 진단(diagnosed, set the moment the
+  // injury happens, at THIS season's end in finalizeSeasonEvents) → 수술/재활 선택
+  // (buildInjuryRehabChoiceEvent below, a prepend-gate event exactly like buildTradeRiskEvent,
+  // fires at the START of NEXT season) → 재활 기간 (advanceInjuryArc ticks recoverySeasonsLeft
+  // down once per season, applying a smaller ongoing penalty each season still recovering) →
+  // 복귀 결과 (once recovery time is up, a recurrence roll — chosen path controls the odds — either
+  // sends the arc back to 'diagnosed' for another cycle, or resolves it with an outcome that
+  // depends on which path was chosen). This is deliberately layered ON TOP of the existing
+  // severeInjuryCount/decline mechanic (never replacing it) — every existing achievement/trait/
+  // rival-injury check keyed on severeInjuryCount keeps working completely unchanged; only one
+  // arc is ever active at a time (a fresh severe injury while one is already in progress just adds
+  // its usual immediate decline, without starting a second concurrent arc).
+  var INJURY_REHAB_PATHS = {
+    surgery:    { recoverySeasons:2, recurrenceRisk:0.10 },
+    rehab_only: { recoverySeasons:1, recurrenceRisk:0.22 },
+    push_through:{ recoverySeasons:0, recurrenceRisk:0.42 }
+  };
+  function statLabel(position, key){
+    var found=statList(position).filter(function(s){ return s.key===key; })[0];
+    return found ? found.label : key;
+  }
+  function buildInjuryRehabChoiceEvent(p){
+    if(!p.injuryArc || p.injuryArc.stage!=='diagnosed') return null;
+    var key=p.injuryArc.key;
+    var label=statLabel(p.position, key);
+    return {
+      id:'injury_rehab_choice',
+      category:'health',
+      prompt:function(pl){ return label+' 부위의 정밀 진단 결과, 수술과 재활 일정을 결정해야 하는 상황입니다.'; },
+      choices:[
+        { label:'수술을 받고 충분히 재활한다 (약 2시즌)', resolve:function(pl, ctx){
+            var path=INJURY_REHAB_PATHS.surgery;
+            pl.injuryArc.stage='recovering'; pl.injuryArc.choice='surgery';
+            pl.injuryArc.recoverySeasonsLeft=path.recoverySeasons; pl.injuryArc.recurrenceRisk=path.recurrenceRisk;
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)-3;
+            return '수술을 받고 충분한 재활 기간을 갖기로 했습니다. 완전히 회복할 때까지 시간이 필요합니다.';
+          }},
+        { label:'수술 없이 재활에 집중한다 (약 1시즌)', resolve:function(pl, ctx){
+            var path=INJURY_REHAB_PATHS.rehab_only;
+            pl.injuryArc.stage='recovering'; pl.injuryArc.choice='rehab_only';
+            pl.injuryArc.recoverySeasonsLeft=path.recoverySeasons; pl.injuryArc.recurrenceRisk=path.recurrenceRisk;
+            ctx.statBoost[key]=(ctx.statBoost[key]||0)-2;
+            return '수술 없이 재활에만 집중하며 비교적 빠른 복귀를 노리기로 했습니다.';
+          }},
+        { label:'통증을 참고 곧바로 정상적으로 뛴다', resolve:function(pl, ctx){
+            var path=INJURY_REHAB_PATHS.push_through;
+            pl.injuryArc.stage='recovering'; pl.injuryArc.choice='push_through';
+            pl.injuryArc.recoverySeasonsLeft=path.recoverySeasons; pl.injuryArc.recurrenceRisk=path.recurrenceRisk;
+            return '별다른 치료 없이 통증을 참고 곧바로 정상적으로 경기에 나서기로 했습니다.';
+          }}
+      ]
+    };
+  }
+  // Advances an active 'recovering' injury arc by exactly one season — called once per season from
+  // finalizeSeasonEvents, after this season's events (including a possible buildInjuryRehabChoiceEvent
+  // choice made this same season) have already resolved. A 'diagnosed' arc (not yet given a choice)
+  // or no arc at all is a no-op here; the choice gate above is what moves 'diagnosed' -> 'recovering'.
+  function advanceInjuryArc(p, hi){
+    var arc=p.injuryArc;
+    if(!arc || arc.stage!=='recovering') return;
+    if(arc.recoverySeasonsLeft>0){
+      arc.recoverySeasonsLeft-=1;
+      // Ongoing reduced effectiveness while still recovering — a smaller, season-long drag distinct
+      // from the choice event's one-time hit, reflecting limited playing time/conditioning.
+      p.stats[arc.key]=roundClamp(p.stats[arc.key]-1, 10, 99);
+      hi.push('재활을 이어가며 정상 컨디션을 완전히 되찾지는 못한 시즌이었습니다.');
+      if(arc.recoverySeasonsLeft>0) return; // more recovery ahead — the recurrence roll waits until it's actually over
+    }
+    // Recovery window (if any — push_through has none) is over: roll whether the injury recurs.
+    if(Math.random()<arc.recurrenceRisk){
+      p.severeInjuryCount=(p.severeInjuryCount||0)+1;
+      var declineAmt=randInt(2,5);
+      p.stats[arc.key]=roundClamp(p.stats[arc.key]-declineAmt, 10, 99);
+      hi.push('재활 중이던 부상이 재발해 '+statLabel(p.position, arc.key)+' 능력치가 다시 떨어졌습니다. (-'+declineAmt+') 다음 시즌 다시 치료 방향을 결정해야 합니다.');
+      // Back to square one — 'diagnosed' again, so next season's gate event re-presents the choice.
+      p.injuryArc={ stage:'diagnosed', startYear:p.careerYears, key:arc.key, recurrenceCount:(arc.recurrenceCount||0)+1 };
+      return;
+    }
+    // Clean recovery — the outcome depends on which path was actually chosen.
+    if(arc.choice==='surgery'){
+      applyPermanentStatDelta(p, arc.key, 3, 0);
+      hi.push('충분한 재활을 마치고 완전히 회복해 복귀했습니다.');
+    } else if(arc.choice==='rehab_only'){
+      hi.push('재활을 마치고 무리 없이 정상적으로 복귀했습니다.');
+    } else {
+      hi.push('큰 탈 없이 넘어갔지만, 제대로 된 치료를 받지 못한 여파가 몸에 남았습니다.');
+    }
+    p.injuryArc=null;
+  }
+  var TRADE_RISK_THRESHOLD = 70;
+  var TRADE_PROTECTION_YEARS = 2;
+  function buildTradeRiskEvent(p){
+    if((p.tradeRiskLevel||0)<TRADE_RISK_THRESHOLD) return null;
+    if((p.tradeProtectionYears||0)>0) return null;
+    if(p.pendingTradeRequest) return null; // already resolved through some other path this cycle
+    return {
+      id:'trade_risk_gate',
+      category:'trade',
+      prompt:function(pl){ return '누적된 이적 관련 신호로 인해 '+(pl.team?pl.team.name:'구단')+'이(가) 실제로 트레이드를 검토하고 있습니다. 어떻게 대응하시겠습니까?'; },
+      choices:[
+        { label:'이적을 받아들인다 — 새로운 팀을 찾는다', resolve:function(pl, ctx){
+            pl.pendingTradeRequest=true;
+            pl.tradeRiskLevel=0;
+            return '트레이드 논의를 받아들이기로 했습니다. 시즌 후 새로운 팀을 찾게 됩니다.';
+          }},
+        { label:'구단과 대화해 팀에 남기로 한다', resolve:function(pl, ctx){
+            pl.tradeRiskLevel=0;
+            pl.tradeProtectionYears=TRADE_PROTECTION_YEARS;
+            adjustFan(pl, 5);
+            return '구단과 진지하게 대화를 나눈 끝에 당분간 팀에 남기로 했습니다.';
+          }},
+        { label:'일단 지켜본다', resolve:function(pl, ctx){
+            pl.tradeRiskLevel=Math.round((pl.tradeRiskLevel||0)*0.5);
+            return '별다른 결정을 내리지 않고 상황을 지켜보기로 했습니다.';
+          }}
+      ]
+    };
+  }
   // 특성화 루트 (Step 4) 선택/재선택은 별도의 블로킹 화면이 아니라, 이번 시즌의 첫 "이벤트"로 끼워
   // 넣는다 — buildMilitaryTournamentEvent와 같은 패턴. 이렇게 하면 매 시즌 시작 시 state.seasonFlow가
   // 항상 정상적으로 채워진다는 기존 계약(2군/병역 분기 이외에는 반드시 seasonFlow.step==='events'로
@@ -5656,9 +6538,16 @@
   // 스크립트를 크래시시켰던 것과 같은 종류의 실수를 반복하지 않기 위함.
   function buildGrowthPathChoiceEvent(p){
     if(!((specializationUnlocked(p) && !p.growthPath) || p.growthPathChangeAvailable)) return null;
-    var routes=specializationRoutesFor(p);
-    if(!routes.length) return null;
     var isChange=!!(p.growthPathChangeAvailable && p.growthPath);
+    // Item 10 (2026-09): re-selecting the SAME growth path used to always say "전환했습니다"
+    // (switched) even though nothing changed. Instead of a message-text branch, the current
+    // path is simply excluded from the offered choices on a re-selection — every route always
+    // reads as "전환했습니다" because it always genuinely is one. (Every archetype has 3 routes,
+    // so removing one still leaves a real choice.) On the very first pick there's no current
+    // path yet, so nothing is excluded.
+    var routes=specializationRoutesFor(p);
+    if(isChange) routes=routes.filter(function(r){ return r.id!==p.growthPath; });
+    if(!routes.length) return null;
     return {
       id:'growth_path_choice',
       category:'성장 방향',
@@ -5681,6 +6570,19 @@
     };
   }
 
+  // Item 22 (2026-09): event ids whose category maps to a career-direction decision the user
+  // listed (이적요청/대표팀/포지션전환/에이전트교체/장기계약/해외진출) — these must never be
+  // silently auto-resolved by 간편 진행, unlike routine flavor events (coach_change, milestone
+  // chases, allstar selection, etc.) which are fine to fold into the auto-summary line.
+  var ALWAYS_MANUAL_EVENT_IDS = {
+    trade_rumor:1, trade_deadline_rumor:1, trade_risk_gate:1,
+    national_team_call:1, wbc_call_up:1,
+    position_change_request:1,
+    agent_change_longterm_deal:1, agent_strategy:1,
+    overseas_scouting_offer:1,
+    contract_year_pressure:1, front_office_meeting:1,
+    injury_rehab_choice:1
+  };
   var MAX_SEASON_MANUAL_EVENTS=4;
   function beginSeasonEvents(){
     var p=state.player;
@@ -5693,6 +6595,10 @@
     // lowest-priority manual picks (the tail, already randomly ordered) spill into the
     // auto-resolved summary line instead of disappearing outright.
     var prepend=[];
+    var injuryRehabEvent=buildInjuryRehabChoiceEvent(p);
+    if(injuryRehabEvent) prepend.push(injuryRehabEvent);
+    var tradeRiskEvent=buildTradeRiskEvent(p);
+    if(tradeRiskEvent) prepend.push(tradeRiskEvent);
     var growthPathEvent=buildGrowthPathChoiceEvent(p);
     if(growthPathEvent) prepend.push(growthPathEvent);
     var tournamentEvent=buildMilitaryTournamentEvent(p);
@@ -5722,18 +6628,22 @@
       var choiceIdx=randInt(0, aev.choices.length-1);
       return aev.choices[choiceIdx].resolve(p, state.seasonFlow.ctx);
     });
-    // 간편 진행: on top of the above, only the very first event of the season (the military
-    // tournament / growth-path / major pick, whichever sorts first) is asked as a real choice —
-    // every other picked event ALSO auto-resolves the same way. 스토리 진행 (default) leaves the
-    // manual picks as real choices.
+    // 간편 진행 (Item 22, 2026-09): 간편 진행 중이라도 이적요청/대표팀 발탁/포지션 전환/에이전트
+    // 교체·장기계약/해외 진출처럼 커리어의 방향을 바꾸는 결정은 항상 사용자가 직접 고르게 한다 —
+    // (FA/일반 계약 협상/병역/은퇴는 애초에 이 이벤트 시스템 밖의 별도 seasonFlow 단계라 원래도
+    // 항상 수동이다.) 그 밖의 소소한 이벤트만 이번 시즌의 나머지와 함께 자동으로 처리되고, 그
+    // 결과는 "선수가 결정했습니다"가 아니라 "그 밖의 소소한 일들"로 구분해서 보여준다.
     if((p.progressionMode||'story')==='simple' && state.seasonFlow.events.length>1){
-      var manualEvent=state.seasonFlow.events[0];
-      var simpleRest=state.seasonFlow.events.slice(1);
-      autoLines=autoLines.concat(simpleRest.map(function(aev){
+      var keepManual=[], collapseToAuto=[];
+      state.seasonFlow.events.forEach(function(aev, idx){
+        if(idx===0 || ALWAYS_MANUAL_EVENT_IDS[aev.id]) keepManual.push(aev);
+        else collapseToAuto.push(aev);
+      });
+      autoLines=autoLines.concat(collapseToAuto.map(function(aev){
         var choiceIdx=randInt(0, aev.choices.length-1);
         return aev.choices[choiceIdx].resolve(p, state.seasonFlow.ctx);
       }));
-      state.seasonFlow.events=[manualEvent];
+      state.seasonFlow.events=keepManual;
     }
     if(autoLines.length) state.seasonFlow.resolvedNarratives.push('그 밖의 소소한 일들 — '+autoLines.join(' '));
 
@@ -5777,13 +6687,22 @@
     } else if(outcome.outcome==='stay'){
       msg='아직은 퓨처스리그에서 조금 더 경쟁력을 증명해야 할 시즌이었습니다.';
     } else if(outcome.outcome==='seconddraft'){
-      msg='끝내 1군의 부름을 받지 못해 방출 통보를 받았습니다. 다행히 올해는 2차 드래프트가 열리는 해 — '+esc(outcome.team.name)+'이(가) '+outcome.round+'라운드에서 지명하며 새 기회를 잡았습니다. (보상금 '+fmtMoney(outcome.bonus)+')';
+      var immediateOneGunMsg = outcome.round<=2;
+      msg='끝내 1군의 부름을 받지 못해 방출 통보를 받았습니다. 다행히 올해는 2차 드래프트가 열리는 해 — '+esc(outcome.team.name)+'이(가) '+outcome.round+'라운드에서 지명하며 새 기회를 잡았습니다. (보상금 '+fmtMoney(outcome.bonus)+')'+
+        (immediateOneGunMsg ? ' 상위 라운드 지명답게 곧바로 1군 엔트리에 등록됩니다.' : ' 다만 새 팀에서도 1군 자리는 퓨처스리그에서 다시 증명해야 합니다.');
       danger=true;
     } else if(outcome.outcome==='undrafted'){
       msg='방출 통보를 받았지만 올해 2차 드래프트에서는 지명받지 못했습니다. 무소속으로 마지막 기회를 노려봅니다.';
       danger=true;
     } else if(outcome.outcome==='stuck'){
       msg='올해는 2차 드래프트가 열리는 해가 아니라, 방출을 피하고 한 시즌 더 퓨처스리그에서 기회를 이어갑니다.';
+    } else if(outcome.outcome==='careerEndingRelease'){
+      // Item 28: a second (or later) trip through the 2차드래프트 cycle without ever sticking in
+      // 1군 finally runs out the clock — this is a real career-ending outcome, not just another
+      // "한 시즌 더".
+      msg='2차 드래프트로 새 팀을 찾았던 이후로도 끝내 1군의 부름을 받지 못했습니다. 구단은 재계약하지 않기로 했고, 더 이상 선수 생활을 이어갈 길을 찾지 못해 은퇴를 받아들이게 되었습니다.';
+      btnLabel='은퇴식으로 이동';
+      danger=true;
     }
     html += '<div class="log-item"'+(danger?' style="color:var(--danger);font-weight:700;"':'')+'>'+esc(msg)+'</div>';
     html += '<div class="btn-row"><button class="btn btn-primary" data-action="futures-season-advance">'+btnLabel+'</button></div>';
@@ -5793,17 +6712,70 @@
     var p=state.player;
     closeSeasonModal();
     var outcome=p.futuresOutcome;
+    // The salary that was actually in effect during the 2군 season just played goes toward
+    // career earnings, exactly like the 1군 path does in finalizeSeasonEvents — previously a 2군
+    // season contributed nothing at all to totalEarnings, understating a player's real career
+    // income for every minor-league year they ever spent.
+    addEarnings(p, 'salary', p.salary||0);
     p.age+=1; p.careerYears+=1;
     applyAgingDecline(p);
+    // Item 28: a repeat 2차드래프트 failure (see checkFuturesOutcome) ends the career outright —
+    // handled first and separately, since it skips the normal "continue the futures grind" tail of
+    // this function entirely (own screen transition to 'ending', own save/archive).
+    if(outcome.outcome==='careerEndingRelease'){
+      p.highlights.push({year:p.careerYears, text:'2차 드래프트 이후에도 끝내 1군 진입에 실패해 구단으로부터 선수 생활 은퇴를 통보받았습니다.'});
+      state.forcedRetireReason='방출';
+      p.isRetired=true;
+      state.screen='ending';
+      state.seasonFlow=null;
+      pushAchievementHighlights(p, checkAchievements(p, 'retire', {}), null);
+      archivePlayer(p);
+      clearSave();
+      render();
+      saveGame();
+      return;
+    }
     if(outcome.outcome==='seconddraft'){
-      p.team=outcome.team; p.teamTenureYears=0; p.tradeCount=(p.tradeCount||0)+1;
-      p.totalEarnings=(p.totalEarnings||0)+(outcome.bonus||0);
-      p.rosterLevel='2군'; p.futuresYears=0;
+      var oldTeamName2=p.team?p.team.name:'무소속';
+      p.team=outcome.team; p.teamTenureYears=0;
+      // A 2차 드래프트 pick is its own move type (see performTrade's moveType), not a real trade —
+      // it must not count toward tradeCount. The round bonus is compensation paid BETWEEN clubs
+      // for the rights to the player, never money that lands in the player's own pocket, so it
+      // deliberately does NOT go through addEarnings — see also 4-3 (FA/트레이드/2차드래프트 구분).
       p.secondDraftCount=(p.secondDraftCount||0)+1;
+      // Item 28 ("round별 1군등록의무"): which round a club spends on a player is itself a signal
+      // of real intent to use them — a 1~2라운드 pick lands directly on the 1군 roster, exactly as
+      // a club actually willing to spend a high pick on a released player would use them right
+      // away; a 3~4라운드 pick is more of a depth flier and still has to earn a 1군 spot from 2군
+      // like any other prospect, unprotected by any such obligation.
+      var immediateOneGun = outcome.round<=2;
+      p.rosterLevel = immediateOneGun ? '1군' : '2군';
+      p.futuresYears=0;
+      if(immediateOneGun && !p.majorDebutYear) p.majorDebutYear=p.careerYears;
+      // Being let go still stings even with a new landing spot lined up — a small, one-time
+      // approval hit distinct from the relief the highlight text below describes.
+      adjustFan(p, -8);
+      if(!Array.isArray(p.teamMoveHistory)) p.teamMoveHistory=[];
+      p.teamMoveHistory.push({year:p.careerYears, from:oldTeamName2, to:outcome.team.name, type:'seconddraft'});
+      p.highlights.push({year:p.careerYears, text:'2차 드래프트로 '+outcome.team.name+'에 '+outcome.round+'라운드 지명되어 새 팀에서 시작합니다. (구단 간 보상금 '+fmtMoney(outcome.bonus||0)+', 선수 개인 수입과는 무관합니다)'+(immediateOneGun ? ' 상위 라운드 지명답게 곧바로 1군 엔트리에 등록됩니다.' : ' 1군 진입을 위해서는 새 팀의 퓨처스리그에서 다시 증명해야 합니다.')});
     } else if(outcome.outcome==='undrafted'){
       // One more attempt at the SAME team next year rather than an abrupt career end — a real
       // released player without a second-draft landing spot still gets tryout chances.
       p.rosterLevel='2군'; p.futuresYears=Math.max(0,(p.futuresYears||0)-1);
+    } else if(outcome.outcome==='callup'){
+      // A call-up to 1군 comes with a modest pay bump — a 2군 salary sits well below a real 1군
+      // rate, and no negotiation screen runs until NEXT season's contract step, so without this a
+      // player would spend their entire debut 1군 season still earning their old 2군 pay.
+      var bumped=Math.max(2700, Math.round((p.salary||2700)*1.15));
+      if(bumped>p.salary){
+        p.salary=bumped;
+        p.highlights.push({year:p.careerYears, text:'1군 콜업과 함께 연봉이 '+fmtMoney(p.salary)+'로 소폭 인상되었습니다.'});
+      }
+    }
+    if(outcome.outcome!=='callup'){
+      // Multi-season 2군 cost-of-living adjustment — without this, a player stuck in 2군 for
+      // several straight years earns the literal same rookie salary the entire time.
+      p.salary=Math.max(2700, Math.round((p.salary||2700)*1.03));
     }
     // callup/stay/stuck already set rosterLevel/futuresYears inside checkFuturesOutcome.
     if(militaryUnresolved(p) && p.age>=MILITARY_FORCE_AGE){
@@ -5900,6 +6872,7 @@
     var ev=sf.events[sf.eventIndex];
     var html = renderSeasonStepIndicator('events')+
       '<div class="eyebrow">'+p.careerYears+'년차 시즌 · 이벤트 ('+(sf.eventIndex+1)+'/'+sf.events.length+')</div>'+
+      renderEventVisual(ev.category)+
       '<span class="event-category-tag">'+esc(ev.category||'시즌 이벤트')+'</span>'+
       '<h2 style="font-size:19px;">'+esc(ev.prompt(p))+'</h2>'+
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
@@ -5999,15 +6972,20 @@
     var newPerks=checkPerks(p, line);
     applyPerkBoosts(p, line);
     awardScore = p.position==='batter' ? seasonScoreBatter(line) : seasonScorePitcher(line);
-    var awards=determineAwards(p, line, isRookie);
+    // Generate this season's individual-record field exactly once, right here — the SAME data
+    // both crowns the record-king titles below and is what the 리그 탭 leaderboard and 기록 탭
+    // history will show for this season from now on (persisted on the history entry itself, so
+    // a save/reload never re-rolls it).
+    var leagueBoards = generateSeasonLeagueRecords(p, line);
+    var awards = recordKingAwardsFromBoards(leagueBoards).concat(determineAwards(p, line, isRookie));
 
-    p.history.push({year:p.careerYears, age:p.age, teamName:p.team?p.team.name:'무소속', line:line});
+    p.history.push({year:p.careerYears, age:p.age, teamName:p.team?p.team.name:'무소속', line:line, leagueBoards:leagueBoards});
     p.careerScore=(p.careerScore||0)+awardScore;
     p.majorSeasons=(p.majorSeasons||0)+1;
     awards.forEach(function(a){ p.awardsAll.push({year:p.careerYears, name:a}); });
     // The salary that was actually in effect during the season just played goes toward the
     // career earnings total (negotiation below only sets pay for the *next* season).
-    p.totalEarnings=(p.totalEarnings||0)+(p.salary||0);
+    addEarnings(p, 'salary', p.salary||0);
     var newAchievements = checkAchievements(p, 'season', {line:line, isRookie:isRookie});
     newAchievements = newAchievements.concat(checkAchievements(p, 'career', {}));
 
@@ -6018,6 +6996,11 @@
 
     // League standings (Phase 15) — rolled every season regardless of whether the player's own
     // team changed, so trades/FA moves into a new club just pick up that club's own fortunes.
+    // Season-attribution rule (2026-09, made explicit as part of the "팀 순위 변화" fix): whatever
+    // team p.team is by the time this line runs — i.e. AFTER any in-season event resolved a trade,
+    // but before the post-season negotiation/FA step, which only ever takes effect NEXT season —
+    // gets full credit for this entire season's box score, standings result, and history entry.
+    // There is exactly one rule, applied consistently every season, never a mid-season split.
     var standings=simulateLeagueStandings(p, sf.perf);
     if(standings){
       p.teamRank=standings.rank; p.teamRecord={wins:standings.wins, losses:standings.losses};
@@ -6056,7 +7039,19 @@
 
     var hi=[];
     pushAchievementHighlights(p, newAchievements, hi);
-    if(line.injury) hi.push(line.injury+'으로 시즌 중 이탈했지만 복귀해 시즌을 마쳤습니다.');
+    if(line.injury){ p.injuryCount=(p.injuryCount||0)+1; hi.push(line.injury+'으로 시즌 중 이탈했지만 복귀해 시즌을 마쳤습니다.'); }
+    // 커리어 목표 실기능화: 목표를 처음 '달성' 상태로 넘기는 시즌에 딱 한 번 하이라이트 + 팬 지지도
+    // 보상을 준다. p.goalMilestoneHit로 중복 지급을 막으므로 세이브를 여러 번 다시 열어도 재지급되지
+    // 않는다.
+    if(!p.goalMilestoneHit){
+      var goalProg=careerGoalProgress(p);
+      if(goalProg.achieved){
+        p.goalMilestoneHit=true;
+        var goalMeta=CAREER_GOALS.filter(function(g){ return g.id===goalProg.goal; })[0];
+        hi.push('커리어 목표 — "'+(goalMeta?goalMeta.label:goalProg.goal)+'" 달성! '+goalProg.statusText);
+        adjustFan(p, 5);
+      }
+    }
     if(awards.indexOf('정규시즌 MVP')>-1) hi.push('압도적인 활약으로 정규시즌 MVP급 시즌을 보냈습니다.');
     else if(awards.indexOf('골든글러브')>-1) hi.push('팀 내 핵심 전력으로 자리매김한 시즌이었습니다.');
     if(p.position==='batter' && line.hr>=30) hi.push('시즌 '+line.hr+'홈런을 쏘아올렸습니다.');
@@ -6067,6 +7062,18 @@
       if(standings.champion) hi.push(teamName+'이(가) 한국시리즈 우승을 차지했습니다!');
       else if(standings.postseason) hi.push(teamName+'이(가) '+standings.rank+'위로 포스트시즌에 진출했습니다.');
       else hi.push(teamName+'은(는) 이번 시즌 '+standings.rank+'위(승 '+standings.wins+' 패 '+standings.losses+')에 머물렀습니다.');
+      // Item 30: round-by-round postseason breakdown for the player's own team, whenever they made
+      // the bracket — walks the recorded rounds and reports only the ones the team actually played
+      // (they simply don't appear in later rounds once eliminated).
+      if(standings.postseason && standings.bracketRounds){
+        var POSTSEASON_ROUND_LABEL={wildcard:'와일드카드 결정전', semifinal:'준플레이오프', playoff:'플레이오프', koreanseries:'한국시리즈'};
+        standings.bracketRounds.forEach(function(rd){
+          if(rd.teamA!==teamName && rd.teamB!==teamName) return;
+          var opp = rd.teamA===teamName ? rd.teamB : rd.teamA;
+          var won = rd.winner===teamName;
+          hi.push((POSTSEASON_ROUND_LABEL[rd.round]||rd.round)+' — '+opp+'을(를) 상대로 '+(won?'승리했습니다.':'패배하며 이번 포스트시즌 여정을 마쳤습니다.'));
+        });
+      }
     }
     if(p.rival && p.rival.scoreLog.length){
       var myTotal=p.careerScore, rivalTotal=p.rival.careerScore;
@@ -6181,14 +7188,19 @@
     // 20 fewer starting points to distribute at creation, growth needs to make up the difference
     // so a balanced (no-focus) build still reaches the same ~80+ OVR peak probability as before.
     var tpEffects=trainingPlanEffects(sf.trainingPlan);
-    var growthPointsRaw = clamp(19+sf.perf*10, 2, 24);
-    var growthPoints = roundClamp(growthPointsRaw*ageTaper*tpEffects.growthMult, 0, 24);
+    // Baseline trimmed 19->17 (2026-09, "성장 시도 횟수 자체를 줄여달라" Phase 2 Item 9) — a modest
+    // cut, not a drastic one: the general channel is now also archetype-biased (see pickGrowthKey/
+    // archetypeAwareGrowthCap below), which does most of the actual work fixing "선수가 아키타입과
+    // 무관하게 고루 자란다" — a big raw-count cut on top of that risked also dragging down genuinely
+    // balanced (올라운드) builds' target OVR, which this channel is still the main driver of.
+    var growthPointsRaw = clamp(17+sf.perf*9, 2, 21);
+    var growthPoints = roundClamp(growthPointsRaw*ageTaper*tpEffects.growthMult, 0, 21);
     // Season-challenge success (Phase 15) grants a few extra training attempts on top of the
     // normal growth roll — the reward scales with the difficulty actually chosen.
     if(challengeResult && challengeResult.success) growthPoints += challengeTierInfo.successRewardGrowth;
     for(var gi=0; gi<growthPoints; gi++){
-      var gKey=pick(growthKeys);
-      var gCap = (focusKey && gKey===focusKey) ? effectiveFocusCap(p, focusKey) : nonFocusStatCap(p, gKey);
+      var gKey=pickGrowthKey(p, growthKeys);
+      var gCap = (focusKey && gKey===focusKey) ? effectiveFocusCap(p, focusKey) : archetypeAwareGrowthCap(p, gKey);
       applyPermanentStatDelta(p, gKey, 1, 0, gCap);
     }
     if(growthPoints>=2) hi.push('좋은 활약 덕분에 다른 능력치도 눈에 띄게 성장했습니다.');
@@ -6205,6 +7217,11 @@
     // roll no matter how the rest of the career is going.
     // resilience (makeup) further reduces how often a severe injury actually leaves a lasting
     // mark, and softens the decline amount when it does.
+    // Item 29: advance any already-in-progress injury arc (see advanceInjuryArc above) BEFORE this
+    // season's fresh severe-injury roll below — a 'recovering' arc that reached the end of its
+    // window this season resolves (clean or recurrence) first, so a same-season fresh severe
+    // injury never gets confused with an existing arc's own recurrence.
+    advanceInjuryArc(p, hi);
     var sevInjuryChance=clamp(0.25-(p.momentum||0)*0.20-careerLuck*0.15-Math.max(0,resilienceN)*0.08, 0.05, 0.60);
     if(line.injury==='심각한 부상' && Math.random()<sevInjuryChance){
       var declineKey=pickAnyStat(p);
@@ -6217,6 +7234,13 @@
       // can be revisited — the actual re-choice happens through the normal route-choice screen
       // at the start of next season.
       if(p.growthPath) p.growthPathChangeAvailable=true;
+      // Item 29: this is also what actually kicks off a multi-season 진단→수술/재활선택→복귀 arc —
+      // only when no arc is already active, so a fresh severe injury mid-arc just adds its usual
+      // immediate decline above without starting a second, concurrent arc.
+      if(!p.injuryArc){
+        p.injuryArc={ stage:'diagnosed', startYear:p.careerYears, key:declineKey };
+        hi.push('추가 정밀 검진 결과 장기적인 재활이 필요한 부상으로 진단받아, 다음 시즌 수술과 재활 방향을 결정해야 합니다.');
+      }
     }
     // clutch (makeup) nudges the breakthrough chance up a little, and a hard season-challenge
     // success stacks a much bigger one-time bonus on top — the actual "메리트" a hard difficulty
@@ -6247,7 +7271,7 @@
     if(p.ovrHistory.length>30) p.ovrHistory.shift();
 
     sf.line=line; sf.awards=awards; sf.seasonScoreVal=awardScore; sf.hi=hi;
-    sf.reason=checkForcedRetirement(p);
+    sf.reason=checkForcedRetirement(p, sf.perf);
     state.forcedRetireReason=sf.reason;
     sf.step='report';
     renderReportStep();
@@ -6271,7 +7295,22 @@
       '<div class="eyebrow">'+p.careerYears+'년차 시즌 결과</div><h2>'+esc(p.name)+' — '+p.age+'세 시즌</h2>';
 
     var ovrDelta = (p.ovrHistory && p.ovrHistory.length>=2) ? (p.ovrHistory[p.ovrHistory.length-1].ovr - p.ovrHistory[p.ovrHistory.length-2].ovr) : null;
-    var rankDelta = (p.teamRankHistory && p.teamRankHistory.length>=2) ? (p.teamRankHistory[p.teamRankHistory.length-2].rank - p.teamRankHistory[p.teamRankHistory.length-1].rank) : null;
+    // Only compare this season's team rank against LAST season's if it was actually the SAME
+    // team both times — comparing raw rank numbers across a trade/FA/2차드래프트 move produced
+    // nonsense like "5계단 하락" for a player who simply landed on a weaker new club, which says
+    // nothing about how their old or new team's fortunes actually changed (2026-09, "팀 순위 변화
+    // 계산 수정" fix).
+    var prevRankEntry = (p.teamRankHistory && p.teamRankHistory.length>=2) ? p.teamRankHistory[p.teamRankHistory.length-2] : null;
+    var curRankEntry = (p.teamRankHistory && p.teamRankHistory.length>=1) ? p.teamRankHistory[p.teamRankHistory.length-1] : null;
+    var sameTeamAsPrev = prevRankEntry && curRankEntry && prevRankEntry.team===curRankEntry.team;
+    var rankDelta = sameTeamAsPrev ? (prevRankEntry.rank - curRankEntry.rank) : null;
+    var rankChangeLabel;
+    if(!curRankEntry) rankChangeLabel='-';
+    else if(!prevRankEntry) rankChangeLabel='첫 시즌 · 비교 없음';
+    else if(!sameTeamAsPrev) rankChangeLabel='이적 후 첫 시즌 · 비교 없음';
+    else if(rankDelta>0) rankChangeLabel=rankDelta+'계단 상승';
+    else if(rankDelta<0) rankChangeLabel=(-rankDelta)+'계단 하락';
+    else rankChangeLabel='변동 없음';
     var evalLabel=seasonEvalLabel(sf.perf||0);
 
     var core;
@@ -6283,7 +7322,7 @@
     }
     core.push([evalLabel,'시즌평가']);
     core.push([(ovrDelta===null?'-':(ovrDelta>0?'+':'')+ovrDelta),'OVR변화']);
-    core.push([(rankDelta===null?'-':(rankDelta>0?(rankDelta+'계단 상승'):rankDelta<0?((-rankDelta)+'계단 하락'):'변동 없음')),'팀순위변화']);
+    core.push([rankChangeLabel,'지난 시즌 최종 순위 대비']);
 
     html += '<div class="stat-line-grid">'+
       core.map(function(pr){ return '<div class="stat-line-cell"><div class="v">'+pr[0]+'</div><div class="l">'+pr[1]+'</div></div>'; }).join('')+
@@ -6327,8 +7366,25 @@
       html += '<p class="lede">이번 시즌은 특별한 수상이 없었습니다. 다음 시즌을 기약합니다.</p>';
     }
     if(sf.reason){
-      html += '<hr class="divider"><p style="color:var(--danger);font-weight:700;">'+(sf.reason==='나이' ? '나이 기준을 넘어서 더 이상 선수 생활을 이어갈 수 없습니다.' : '2년 연속 부진으로 구단에서 방출되어 은퇴를 결정합니다.')+'</p>';
-      html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-retire">은퇴식으로 이동</button></div>';
+      // Item 25: the hard age cap ('나이') is still a final, no-choice limit — but the softer
+      // triggers ('고령' — the new probabilistic age/OVR/성적/부상 roll — and '방출') now offer a real
+      // choice instead of forcing retirement outright, with wording that matches why it fired.
+      var isHardCap = sf.reason==='나이';
+      var retireReasonText = sf.reason==='나이'
+        ? '만 '+p.age+'세, 규정상 더 이상 선수 생활을 이어갈 수 없는 나이가 되어 은퇴가 확정되었습니다.'
+        : sf.reason==='방출'
+          ? '2년 연속 부진한 성적으로 구단에서 방출 통보를 받았습니다. 새로운 팀을 알아보기보다, 이번 기회에 은퇴를 진지하게 고민해야 할 시점입니다.'
+          : '나이와 최근 몸 상태, 성적을 감안할 때 이제 은퇴를 진지하게 고민해야 할 시점이 되었습니다.';
+      html += '<hr class="divider"><p style="color:var(--danger);font-weight:700;">'+retireReasonText+'</p>';
+      if(isHardCap){
+        html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-retire">은퇴식으로 이동</button></div>';
+      } else {
+        html += '<div class="btn-row">'+
+          '<button class="btn btn-outline" data-action="retire-challenge-more">한 시즌 더 도전한다</button>'+
+          '<button class="btn btn-outline" data-action="retire-reduce-role">역할 축소를 받아들인다</button>'+
+          '<button class="btn btn-primary" data-action="season-to-retire">은퇴한다</button>'+
+        '</div>';
+      }
     } else if((p.yearsToFA===undefined?3:p.yearsToFA)<=0){
       html += '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-negotiation">FA 시장으로</button></div>';
     } else {
@@ -6339,11 +7395,24 @@
 
   // Picks n distinct teams other than the player's current one — shared by the FA market and
   // the negotiation-fallout rival offers so "multiple teams bidding" looks the same everywhere.
+  // Item 27: which clubs show up to bid is now lightly weighted by team philosophy vs the
+  // player's age — a win-now club is more interested in a proven veteran, a rebuilding club leans
+  // toward a still-young player with more years of upside ahead, and is comparatively less eager
+  // to bid on someone already well past 30. This is a WEIGHTING (Efraimidis-Spirakis weighted
+  // sampling without replacement — each candidate gets a Math.pow(rand(), 1/weight) key and the
+  // largest keys win), never a hard filter, so any team can still appear as a bidder.
   function pickRivalTeams(player, n){
     var candidates=TEAMS.filter(function(t){ return !player.team || t.name!==player.team.name; });
-    candidates=candidates.slice();
-    candidates.sort(function(){ return Math.random()-0.5; });
-    return candidates.slice(0, Math.min(n, candidates.length));
+    var age=player.age||27;
+    function weight(t){
+      var w=1;
+      if(t.philosophy==='win_now'){ w*= age>=30 ? 1.6 : 0.9; }
+      else if(t.philosophy==='rebuild'){ w*= age<27 ? 1.6 : (age>=33 ? 0.6 : 1); }
+      return w;
+    }
+    var keyed=candidates.map(function(t){ return {t:t, key:Math.pow(Math.random(), 1/weight(t))}; });
+    keyed.sort(function(a,b){ return b.key-a.key; });
+    return keyed.slice(0, Math.min(n, keyed.length)).map(function(x){ return x.t; });
   }
   // A rival club's opening FA bid: anchored to the player's real market value (salaryCeiling)
   // rather than their current salary — a true bidding war can leapfrog what their own team was
@@ -6353,15 +7422,21 @@
   // cap is meant for a single team's negotiated raise, but here it kept clipping every rival
   // bid to the exact same number, making 3 "different" offers read as identical — a real
   // bidding war needs headroom to actually spread out.
-  function rivalFAOffer(player){
+  // Item 27: `team` is optional (defaults to a neutral mid-market multiplier, teamMarketMult's
+  // fallback) so every pre-existing caller that doesn't have a specific bidder in hand yet — and
+  // every existing test — keeps behaving exactly as before; only the new per-team FA bid call
+  // sites (renderFAStep) pass one, so a big-market club can genuinely outbid a small-market one
+  // instead of every rival club rolling from the exact same distribution.
+  function rivalFAOffer(player, team){
     var ceiling=salaryCeiling(player);
     var popularityBoost=1+((player.fanApproval||50)-50)/400;
     // A player who chose an aggressive agent (Step 5 event: 에이전트 변경과 장기계약) sees rival
     // clubs bid a little harder — the agent's job is to shop the player around and drive the
     // market up, a multi-season payoff for that earlier choice.
     var agentBoost=player.agentAggressive ? 1.08 : 1;
-    var raw=Math.round(ceiling*rand(0.7,1.5)*popularityBoost*agentBoost);
-    return clamp(raw, 2700, Math.round(ceiling*1.6));
+    var marketMult=teamMarketMult(team);
+    var raw=Math.round(ceiling*rand(0.7,1.5)*popularityBoost*agentBoost*marketMult);
+    return clamp(raw, 2700, Math.round(ceiling*1.6*Math.max(1, marketMult)));
   }
   // The incumbent club's FA retention offer, anchored the same way a rival's bid is — to the
   // player's real current market value (salaryCeiling) — rather than to their old salary the way
@@ -6378,26 +7453,93 @@
     var ceiling=salaryCeiling(player);
     var popularityBoost=1+((player.fanApproval||50)-50)/400;
     var agentBoost=player.agentAggressive ? 1.05 : 1;
-    return Math.round(ceiling*rand(0.75,1.05)*popularityBoost*agentBoost);
+    // Item 27: the incumbent's own retention offer reflects ITS OWN financial identity — a
+    // small-market incumbent simply can't match what a rival's open bid (rivalFAOffer, called with
+    // that specific bidding team) can offer, which is exactly the tension a real "stay or leave"
+    // FA decision should have. teamMarketMult(undefined) is 1.0, so a player with no team on file
+    // (a bare test fixture) behaves exactly as before.
+    var marketMult=teamMarketMult(player.team);
+    return Math.round(ceiling*rand(0.75,1.05)*popularityBoost*agentBoost*marketMult);
   }
 
-  // Every 3 years (yearsToFA counts down to 0 in finishSeasonFlow) the player hits free agency
-  // instead of a normal one-team negotiation: their own club gets a loyalty-boosted retention
-  // offer (first crack at re-signing, same as real KBO FA rules), and several other clubs make
-  // competing bids — the player picks who to sign with.
+  // A rival club's offer during a NEGOTIATION BREAKDOWN (renderNegotiationFalloutChoice) —
+  // this is NOT free agency, so it must NOT reuse rivalFAOffer(). rivalFAOffer anchors to the
+  // player's OVR-based salaryCeiling, which reflects underlying talent and can stay high even
+  // in a genuinely poor statistical season (e.g. a reliever with a 4.05 ERA but strong raw
+  // stuff) — reusing it here let a 7,200만원 pitcher coming off a bad year draw an 8.35억원
+  // rival bid, an ~11.6x jump with no basis in that season's actual performance. A non-FA
+  // breakdown offer instead anchors to the player's CURRENT salary and this season's team
+  // offer — the two numbers actually on the table — with the market ceiling used only as an
+  // upper clamp (never as the multiplier's starting point), a hard per-move raise cap so no
+  // non-FA move can ever multiply salary several times over, and an explicit discount when
+  // the season itself was bad (perf<0): nobody pays a premium to poach a player fresh off a
+  // slump, breakdown or not.
+  var NON_FA_MAX_RAISE_MULT = 1.6; // hard ceiling: a non-FA move can raise salary at most 60% above current, ever
+  // Item 27: `team` is optional (same fallback pattern as rivalFAOffer above) — a big-market
+  // poaching club can stretch its upper bound a little further, but the hard per-move raise cap
+  // (NON_FA_MAX_RAISE_MULT, anchored to the player's own current salary, not the team) is
+  // deliberately untouched by market tier — that guard exists to stop ANY single non-FA move from
+  // multiplying salary several times over, and a rich team buying a bargain is exactly the
+  // scenario it protects against.
+  function nonFARivalOffer(player, teamOffer, perf, team){
+    var base = Math.max(player.salary||2700, teamOffer||0);
+    var mult = (perf<0) ? rand(0.90, 1.15) : rand(1.0, 1.3);
+    if(perf<0) mult *= clamp(1+perf*0.3, 0.75, 1); // extra discount scaling with how bad the season was
+    var marketMult=teamMarketMult(team);
+    var raw = Math.round(base*mult*marketMult);
+    var ceiling = salaryCeiling(player); // upper bound only — never the offer's starting point
+    var hardCap = Math.round((player.salary||2700)*NON_FA_MAX_RAISE_MULT);
+    return clamp(raw, 2700, Math.min(Math.round(ceiling*1.08*Math.max(1,marketMult)), hardCap));
+  }
+
+  // Item 23 (2026-09), FA 자격 현실화: KBO 실제 규정에 가깝게 첫 FA는 정규시즌 1군 등록 8시즌,
+  // 이후 재자격(재FA)은 더 짧은 4시즌으로 분리했다 — 예전엔 최초/재자격 구분 없이 무조건 3시즌마다
+  // FA였다. yearsToFA는 계속 "이 값이 0 이하가 되면 FA"라는 기존 카운트다운 계약을 그대로 유지해
+  // 기존 코드/세이브와 호환되지만, 초기값과 재설정값만 바뀐다. faCycleTotal은 진행률 표시("5.4/9"
+  // 같은)를 위해 "이번 사이클이 총 몇 시즌짜리인지"를 별도로 기록한다.
+  var FA_FIRST_ELIGIBILITY_SEASONS = 8;
+  var FA_REQUALIFY_SEASONS = 4;
+  var FA_DEAL_YEARS_MIN = 2, FA_DEAL_YEARS_MAX = 4;
+  // Item 23 bug fix: a national-team call-up used to subtract a full WHOLE year off yearsToFA
+  // (on top of the normal -1/season decrement every season already gets in finishSeasonFlow),
+  // so a single call-up season silently counted as 2 full seasons toward FA — the exact bug the
+  // user reported. Registration-day credit for a call-up should be a small fractional nudge, not
+  // an entire extra season.
+  var NATIONAL_TEAM_FA_BONUS = 0.3;
+  // Item 23: "5.4/9시즌" style progress display instead of a bare year countdown — makes the
+  // fractional national-team bonus above actually visible to the player instead of invisible
+  // until it happens to cross a whole number.
+  function faProgressLabel(player){
+    var total = player.faCycleTotal || FA_FIRST_ELIGIBILITY_SEASONS;
+    var remaining = (player.yearsToFA===undefined) ? total : player.yearsToFA;
+    if(remaining<=0) return 'FA 자격 취득';
+    var done = Math.max(0, total-remaining);
+    return 'FA까지 '+done.toFixed(1)+'/'+total+'시즌';
+  }
+  // Every 8 seasons (첫 FA) or 4 seasons (재자격) — yearsToFA counts down to 0 in
+  // finishSeasonFlow/national-team events — the player hits free agency instead of a normal
+  // one-team negotiation: their own club gets a loyalty-boosted retention offer (first crack at
+  // re-signing, same as real KBO FA rules), and several other clubs make competing bids.
   function renderFAStep(){
     var sf=state.seasonFlow, p=state.player;
     var baseOffer=teamFAStayOffer(p);
     var loyaltyBonus=clamp((p.teamTenureYears||0)*0.012, 0, 0.10);
     var stayOffer=capSalaryOffer(p, baseOffer*(1+loyaltyBonus));
-    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p)}; });
+    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p, t)}; });
     sf.fa={ stayOffer:stayOffer, rivals:rivals };
+    // 커리어 목표 실기능화: overseas_scouting_offer 이벤트에서 "적극적으로 관심을 표한다"를 골랐던
+    // 선수(overseasInterest===true)에게는 FA 시장에 실제로 해외 진출 협상 선택지가 열린다 — 예전에는
+    // 이벤트 문구만 있고 실제로 아무 곳에도 연결되지 않던 약속이었다.
+    var canOverseas = !!p.overseasInterest && !p.overseasMoveAchieved;
+    sf.fa.canOverseas=canOverseas;
+    var cycleTotal=p.faCycleTotal||FA_FIRST_ELIGIBILITY_SEASONS;
     var html = renderSeasonStepIndicator('contract')+
       '<div class="eyebrow">'+p.careerYears+'년차 · FA(자유계약)</div><h2>'+esc(p.name)+', FA 시장에 나서다</h2>'+
-      '<p class="lede">3년간의 계약이 끝나 FA 자격을 얻었습니다. '+(p.team?esc(p.team.name):'현 소속팀')+'과 재계약하거나, 새로운 팀의 제안을 받아들일 수 있습니다.</p>'+
+      '<p class="lede">'+cycleTotal+'시즌 등록 자격을 채워 FA 자격을 얻었습니다. '+(p.team?esc(p.team.name):'현 소속팀')+'과 재계약하거나, 새로운 팀의 제안을 받아들일 수 있습니다. 계약은 '+FA_DEAL_YEARS_MIN+'~'+FA_DEAL_YEARS_MAX+'년 다년 계약으로 체결되며, 계약 기간 동안은 매년 재협상하지 않습니다.</p>'+
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="stay">잔류 — '+(p.team?esc(p.team.name):'현 소속팀')+'과 '+fmtMoney(stayOffer)+'에 재계약</button>'+
-        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="'+i+'">이적 — '+esc(r.team.name)+'의 제안, '+fmtMoney(r.offer)+'</button>'; }).join('')+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="stay">잔류 — '+(p.team?esc(p.team.name):'현 소속팀')+'과 '+fmtMoney(stayOffer)+'/년에 재계약 '+salaryChangeLabel(p.salary, stayOffer)+'</button>'+
+        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="'+i+'">이적 — '+esc(r.team.name)+'의 제안, '+fmtMoney(r.offer)+'/년 '+salaryChangeLabel(p.salary, r.offer)+' <span style="color:var(--ink-dim);font-size:12px;">('+teamMarketLabel(r.team)+'·'+teamPhilosophyLabel(r.team)+')</span></button>'; }).join('')+
+        (canOverseas ? '<button class="btn btn-outline" style="text-align:left;" data-action="resolve-fa" data-choice="overseas">해외 진출을 추진한다 — 해외 리그 구단과의 정식 협상 테이블</button>' : '')+
       '</div>'+
       '<p class="lede" style="font-size:13px;margin-top:14px;">'+(p.team?esc(p.team.name):'현 소속팀')+'은 그동안의 활약을 감안해 우선 협상 혜택을 제공합니다.</p>';
     openSeasonModal(html);
@@ -6405,39 +7547,82 @@
 
   function resolveFA(choice){
     var sf=state.seasonFlow, p=state.player, fa=sf.fa;
+    var oldSalary=p.salary;
     var narrative;
+    var dealYears=randInt(FA_DEAL_YEARS_MIN, FA_DEAL_YEARS_MAX);
     if(choice==='stay'){
       p.salary=fa.stayOffer;
-      narrative=(p.team?p.team.name:'현 소속팀')+'과 '+fmtMoney(fa.stayOffer)+'에 잔류 계약을 맺었습니다.';
+      narrative=(p.team?p.team.name:'현 소속팀')+'과 '+fmtMoney(fa.stayOffer)+'/년, '+dealYears+'년 계약으로 잔류 계약을 맺었습니다.';
       adjustFan(p, 6);
+    } else if(choice==='overseas'){
+      p.overseasMoveAchieved=true;
+      // Never let a headline "해외 진출" contract read as a pay CUT even for a player already
+      // sitting near their KBO-ability-based salary ceiling — same floor-at-current-salary
+      // defense used for the non-FA rival-offer fix (Item 1).
+      var overseasOffer=Math.max(oldSalary, capSalaryOffer(p, oldSalary*1.3));
+      p.salary=overseasOffer;
+      narrative='해외 리그 구단과 정식 협상을 마치고 '+fmtMoney(overseasOffer)+' 규모의 새 계약에 합의했습니다.';
+      adjustFan(p, 8);
+      p.highlights.push({year:p.careerYears, text:'오랫동안 꿈꿔온 해외 진출의 문을 실제로 열었습니다.'});
     } else {
       var idx=parseInt(choice,10);
       var pick=fa.rivals[idx];
-      var newTeam=performTrade(p, 'FA 자격을 얻어', pick.team);
+      var newTeam=performTrade(p, 'FA 자격을 얻어', pick.team, 'fa');
       p.salary=pick.offer;
-      narrative='FA 시장에서 '+newTeam.name+'와(과) '+fmtMoney(pick.offer)+'에 새 계약을 맺었습니다.';
+      narrative='FA 시장에서 '+withJosa(newTeam.name,'과와')+' '+fmtMoney(pick.offer)+'/년, '+dealYears+'년 계약을 맺었습니다.';
       p.pendingTradeRequest=false; // the FA move already covers any pending "이적을 원한다" flag
     }
-    p.yearsToFA=3;
+    // Item 23: FA 재자격 기간은 최초보다 짧다(4시즌) — 매번 8시즌으로 리셋되지 않는다.
+    p.yearsToFA=FA_REQUALIFY_SEASONS;
+    p.faCycleTotal=FA_REQUALIFY_SEASONS;
+    // Item 23: FA 계약은 다년 계약 — choice!=='overseas'인 실제 KBO 잔류/이적 계약만 계약 기간
+    // 동안 재협상 없이 유지된다(해외 진출은 이 락 대상이 아니다 — 별도 트랙).
+    if(choice!=='overseas'){
+      p.contractYearsRemaining=Math.max(0, dealYears-1);
+      p.lastContractYears=dealYears;
+      p.lastContractAnnualSalary=p.salary;
+      p.lastContractTotal=p.salary*dealYears;
+    }
     p.highlights.push({year:p.careerYears, text:narrative});
+    var contractCardHtml = (choice!=='overseas') ?
+      '<div class="stat-line-grid" style="margin:14px 0;">'+
+        '<div class="stat-line-cell"><div class="v">'+dealYears+'년</div><div class="l">계약 기간</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+fmtMoney(p.salary)+'</div><div class="l">연봉</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+fmtMoney(p.lastContractTotal||0)+'</div><div class="l">계약 총액(추정)</div></div>'+
+      '</div>' : '';
     var html = renderSeasonStepIndicator('contract')+
       '<div class="eyebrow">FA 계약 결과</div><h2>'+esc(p.name)+'의 새 계약</h2>'+
-      '<p class="lede">'+esc(narrative)+'</p>'+
+      '<p class="lede">'+esc(narrative)+' <span style="color:var(--ink-dim);font-size:13px;">(기존 연봉 '+fmtMoney(oldSalary)+' 대비 '+salaryChangeLabel(oldSalary, p.salary)+')</span></p>'+
+      contractCardHtml+
       '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-advance">다음 시즌으로</button></div>';
     openSeasonModal(html);
   }
 
+  // Item 23 (2026-09): while a multi-year FA deal is still running (p.contractYearsRemaining>0),
+  // there is nothing to negotiate — the terms were locked in when the deal was signed. Showing
+  // a normal offer/counter-offer screen every single season during a signed 4-year deal would be
+  // exactly the "매년 재협상" the user asked to stop. This still uses the same 'negotiate' action
+  // as the normal flow (so nothing about the season-advance wiring changes), it just short-circuits
+  // straight through with no real choice.
   function renderNegotiationStep(){
     var sf=state.seasonFlow, p=state.player;
+    if((p.contractYearsRemaining||0)>0){
+      var html2 = renderSeasonStepIndicator('contract')+
+        '<div class="eyebrow">'+p.careerYears+'년차 · 다년 계약 진행 중</div><h2>계약이 아직 유효합니다</h2>'+
+        '<p class="lede">'+(p.team?esc(p.team.name):'현 소속팀')+'과(와) 체결한 '+(p.lastContractYears||0)+'년 계약이 아직 '+p.contractYearsRemaining+'시즌 더 남아 있어, 이번 시즌은 재협상 없이 기존 연봉 '+fmtMoney(p.salary)+'로 시즌을 치릅니다.</p>'+
+        '<div class="btn-row"><button class="btn btn-primary" data-action="negotiate" data-stance="accept">다음 시즌으로</button></div>';
+      openSeasonModal(html2);
+      return;
+    }
     sf.teamOffer = teamOfferSalary(p, sf.perf);
     var html = renderSeasonStepIndicator('contract')+
       '<div class="eyebrow">'+p.careerYears+'년차 연봉 협상</div><h2>연봉 협상</h2>'+
       '<p class="lede">이번 시즌 성적을 바탕으로 구단이 제시한 금액은 <b style="color:var(--ink);">'+fmtMoney(sf.teamOffer)+'</b>입니다. (현재 연봉 '+fmtMoney(p.salary)+')</p>'+
-      '<p class="lede" style="font-size:12px;">현재 팬 여론: <b>'+fanApprovalLabel(p.fanApproval)+'</b> · '+(p.team?p.team.name:'현 소속팀')+'에서 '+(p.teamTenureYears||0)+'년째 활약 — 인기와 연차가 협상에 유리하게 작용합니다.</p>'+
+      '<p class="lede" style="font-size:12px;">현재 팬 여론: <b>'+fanApprovalLabel(p.fanApproval)+'</b> · '+(p.team?p.team.name:'현 소속팀')+' — '+teamTenureLabel(p)+' — 인기와 연차가 협상에 유리하게 작용합니다.</p>'+
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="accept">제안을 수락한다 — 안전하게 '+fmtMoney(sf.teamOffer)+'</button>'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="moderate">적당히 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.15))+'</button>'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="aggressive">파격적인 인상을 요구한다 — 약 '+fmtMoney(capAggressiveSalaryOffer(p, sf.teamOffer*1.5))+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="accept">제안을 수락한다 — 안전하게 '+fmtMoney(sf.teamOffer)+' '+salaryChangeLabel(p.salary, sf.teamOffer)+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="moderate">적당히 인상을 요구한다 — 약 '+fmtMoney(capSalaryOffer(p, sf.teamOffer*1.15))+' '+salaryChangeLabel(p.salary, capSalaryOffer(p, sf.teamOffer*1.15))+'</button>'+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate" data-stance="aggressive">파격적인 인상을 요구한다 — 약 '+fmtMoney(capAggressiveSalaryOffer(p, sf.teamOffer*1.5))+' '+salaryChangeLabel(p.salary, capAggressiveSalaryOffer(p, sf.teamOffer*1.5))+'</button>'+
       '</div>'+
       '<p class="lede" style="font-size:13px;margin-top:14px;">과한 요구는 성적이 기대에 못 미쳤을 때 오히려 연봉 삭감이나 트레이드로 이어질 수 있습니다.</p>';
     openSeasonModal(html);
@@ -6445,6 +7630,12 @@
 
   function resolveNegotiation(stance){
     var sf=state.seasonFlow, p=state.player;
+    sf.oldSalaryForDisplay=p.salary;
+    if((p.contractYearsRemaining||0)>0){
+      p.contractYearsRemaining-=1;
+      finalizeNegotiationNarrative('다년 계약 조건에 따라 재협상 없이 연봉 '+fmtMoney(p.salary)+'을(를) 그대로 유지했습니다.');
+      return;
+    }
     var offer=sf.teamOffer, perf=sf.perf;
     // Popular, franchise-tenured players are harder for a club to say no to — fan approval
     // and years spent with the same team both nudge the raise-success chance up.
@@ -6495,17 +7686,18 @@
     var paycutOffer=Math.max(2700, Math.round(offer*0.78));
     // Multiple clubs circle a player once word gets out a negotiation broke down — not just
     // one rival offer, so there's a real choice of destination, not just yes/no on a single
-    // team. Reuses the same market-value-anchored bidding logic as the FA market (rivalFAOffer)
-    // rather than a tight percentage of the ORIGINAL team's offer, so the rival bids actually
-    // spread out instead of all clipping to the same capped number.
-    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:rivalFAOffer(p)}; });
+    // team. This is a non-FA move: nonFARivalOffer() anchors to the player's current salary
+    // and the team's own offer (never the OVR-based market ceiling rivalFAOffer uses), so
+    // these bids stay in a realistic range instead of spiking into a multi-hundred-percent
+    // "bidding war" that has nothing to do with this season's actual play.
+    var rivals=pickRivalTeams(p, 3).map(function(t){ return {team:t, offer:nonFARivalOffer(p, offer, sf.perf, t)}; });
     sf.fallout={ paycutOffer:paycutOffer, rivals:rivals };
     var html = renderSeasonStepIndicator('contract')+
       '<div class="eyebrow">'+p.careerYears+'년차 연봉 협상 · 결렬</div><h2>무리한 요구에 구단이 등을 돌렸습니다</h2>'+
-      '<p class="lede">'+esc(p.team?p.team.name:'구단')+'은(는) 더 이상의 인상 요구를 받아들이지 않기로 했습니다. 소식을 들은 다른 구단들도 관심을 보이고 있습니다. 어떻게 하시겠습니까?</p>'+
+      '<p class="lede">'+esc(p.team?p.team.name:'구단')+'은(는) 더 이상의 인상 요구를 받아들이지 않기로 했습니다. 소식을 들은 다른 구단들도 관심을 보이고 있습니다. 어떻게 하시겠습니까? <span style="color:var(--ink-dim);font-size:13px;">(현재 연봉 '+fmtMoney(p.salary)+')</span></p>'+
       '<div class="btn-row" style="flex-direction:column;align-items:stretch;">'+
-        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="stay">잔류를 택한다 — 삭감된 '+fmtMoney(paycutOffer)+'에 재계약</button>'+
-        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="'+i+'">'+esc(r.team.name)+'의 이적 제안을 수락한다 — '+fmtMoney(r.offer)+'</button>'; }).join('')+
+        '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="stay">잔류를 택한다 — 삭감된 '+fmtMoney(paycutOffer)+'에 재계약 '+salaryChangeLabel(p.salary, paycutOffer)+'</button>'+
+        rivals.map(function(r,i){ return '<button class="btn btn-outline" style="text-align:left;" data-action="negotiate-fallout" data-choice="'+i+'">'+esc(r.team.name)+'의 이적 제안을 수락한다 — '+fmtMoney(r.offer)+' '+salaryChangeLabel(p.salary, r.offer)+' <span style="color:var(--ink-dim);font-size:12px;">('+teamMarketLabel(r.team)+'·'+teamPhilosophyLabel(r.team)+')</span></button>'; }).join('')+
       '</div>'+
       '<p class="lede" style="font-size:13px;margin-top:14px;">이적을 택하면 곧바로 해당 팀 소속으로 다음 시즌을 맞이합니다.</p>';
     openSeasonModal(html);
@@ -6513,10 +7705,11 @@
 
   function resolveNegotiationFallout(choice){
     var sf=state.seasonFlow, p=state.player, fo=sf.fallout;
+    sf.oldSalaryForDisplay=p.salary;
     var narrative;
     if(choice!=='stay'){
       var pick=fo.rivals[parseInt(choice,10)];
-      var newTeam=performTrade(p, '무리한 연봉 요구 끝에', pick.team);
+      var newTeam=performTrade(p, '무리한 연봉 요구 끝에', pick.team, 'nonfa');
       p.salary=pick.offer;
       // A trade already just happened here — if trade_rumor also left pendingTradeRequest
       // set earlier this same season, that request's intent (leave the team) has already
@@ -6536,18 +7729,20 @@
   }
 
   function finalizeNegotiationNarrative(narrative){
-    var p=state.player;
+    var sf=state.seasonFlow, p=state.player;
     if(p.pendingTradeRequest){
-      var newTeam2=performTrade(p, '본인의 이적 요청에 따라');
+      var newTeam2=performTrade(p, '본인의 이적 요청에 따라', null, 'trade');
       narrative += ' 그리고 시즌 후 '+newTeam2.name+'로 트레이드되었습니다.';
     }
     p.pendingTradeRequest=false;
 
     p.highlights.push({year:p.careerYears, text:narrative});
 
+    var oldSalary=sf&&sf.oldSalaryForDisplay;
+    var changeHtml = oldSalary ? ' <span style="color:var(--ink-dim);font-size:13px;">(기존 연봉 '+fmtMoney(oldSalary)+' 대비 '+salaryChangeLabel(oldSalary, p.salary)+')</span>' : '';
     var html = renderSeasonStepIndicator('contract')+
       '<div class="eyebrow">협상 결과</div><h2>'+esc(p.name)+'의 새 계약</h2>'+
-      '<p class="lede">'+esc(narrative)+'</p>'+
+      '<p class="lede">'+esc(narrative)+changeHtml+'</p>'+
       '<div class="btn-row"><button class="btn btn-primary" data-action="season-to-advance">다음 시즌으로</button></div>';
     openSeasonModal(html);
   }
@@ -6569,6 +7764,7 @@
     p.careerYears+=1;
     p.teamTenureYears=(p.teamTenureYears||0)+1;
     p.yearsToFA=(p.yearsToFA===undefined?3:p.yearsToFA)-1;
+    if((p.tradeProtectionYears||0)>0) p.tradeProtectionYears-=1; // Item 24 protection window countdown
     applyAgingDecline(p, trainingPlanEffects(state.seasonFlow && state.seasonFlow.trainingPlan).agingMitigation);
     // Military service is mandatory by MILITARY_FORCE_AGE at the latest — if the player still
     // hasn't earned an exemption or already served by the time they hit that age, Sangmu
@@ -6657,14 +7853,21 @@
         lowFormYears:0, awardsAll:[], highlights:[], isRetired:false,
         fanApproval:50, isDH:false, pendingTradeRequest:false,
         teamTenureYears:0, tradeCount:0, severeInjuryCount:0, totalEarnings:0,
-        yearsToFA:3, momentum:0, momentumState:'neutral', careerLuck:rollCareerLuck(),
+        yearsToFA:FA_FIRST_ELIGIBILITY_SEASONS, faCycleTotal:FA_FIRST_ELIGIBILITY_SEASONS, momentum:0, momentumState:'neutral', careerLuck:rollCareerLuck(),
+        contractYearsRemaining:0, lastContractYears:0, lastContractAnnualSalary:0, lastContractTotal:0,
+        tradeRiskLevel:0, tradeProtectionYears:0,
+        retirementAgeCap:randInt(RETIREMENT_HARD_CAP_MIN, RETIREMENT_HARD_CAP_MAX), roleReduced:false,
+        injuryArc:null, pendingPostseasonStrategy:null,
         archetype:c.archetype, potentialGrade:rollPotentialGrade(), makeup:rollMakeup(),
         rosterLevel:'1군', futuresYears:0, perks:[], rival:null, progressionMode:'story',
         growthPath:null, growthPathBonusApplied:false, growthPathChangeAvailable:false, pendingTrainingPlan:'balance',
         eventHistory:[],
         managerFit:null, rosterCompetitionWon:null, positionFlexible:false,
         overseasInterest:null, mentorBond:0, agentAggressive:false,
-        careerGoal:c.careerGoal||CAREER_GOALS[0].id, simMode:c.simMode||SIM_MODES[0].id
+        careerGoal:c.careerGoal||CAREER_GOALS[0].id, simMode:c.simMode||SIM_MODES[0].id,
+        totalSalaryEarnings:0, totalSigningBonus:0, totalIncentiveEarnings:0, faMoveCount:0, negotiationMoveCount:0,
+        debutTeamName:null, teamMoveHistory:[],
+        injuryCount:0, overseasMoveAchieved:false, goalMilestoneHit:false
       };
       state.hsResult=null;
       state.screen='highschool';
@@ -6673,12 +7876,14 @@
       state.hsResult=simulateHighSchoolSeason(state.player);
     }
     else if(action==='go-to-draft'){
-      state.draftResult=runDraft(state.hsResult.score);
+      state.draftResult=runDraft(state.hsResult.score, p.potentialGrade);
       state.screen='draft';
     }
     else if(action==='sign-developmental'){
       var randomTeam=TEAMS[randInt(0,TEAMS.length-1)];
       p.team=randomTeam;
+      p.debutTeamName=randomTeam.name; // fixed at debut, never touched again — see one_club_man / 원클럽맨 판정
+      p.teamMoveHistory=[];
       p.salary=startingSalary({drafted:false});
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
       p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
@@ -6693,12 +7898,14 @@
     }
     else if(action==='start-pro-career'){
       p.team=state.draftResult.team;
+      p.debutTeamName=state.draftResult.team.name; // fixed at debut, never touched again — see one_club_man / 원클럽맨 판정
+      p.teamMoveHistory=[];
       p.salary=startingSalary(state.draftResult);
       p.draftInfo=state.draftResult;
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
       p.rosterLevel=rollFuturesEntryLevel(p, true, state.draftResult.round);
       if(p.rosterLevel==='1군') p.majorDebutYear=p.careerYears;
-      p.totalEarnings=(p.totalEarnings||0)+(state.draftResult.bonus||0);
+      addEarnings(p, 'bonus', state.draftResult.bonus||0);
       p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
       initMilitaryFields(p);
       state.screen='hub'; state.hubTab='home';
@@ -6745,6 +7952,22 @@
     else if(action==='negotiate-fallout'){ resolveNegotiationFallout(el.getAttribute('data-choice')); return; }
     else if(action==='resolve-fa'){ resolveFA(el.getAttribute('data-choice')); return; }
     else if(action==='season-to-retire'){ finishSeasonFlow(); return; }
+    else if(action==='retire-challenge-more'){
+      // Item 25: declining a soft retirement trigger doesn't cancel it retroactively — it just
+      // means this season doesn't end in retirement. The same probabilistic roll runs again next
+      // season in checkForcedRetirement, so nothing here artificially suppresses future triggers.
+      state.seasonFlow.reason=null; state.forcedRetireReason=null;
+      p.highlights.push({year:p.careerYears, text:'은퇴를 고민했지만, 한 시즌 더 도전하기로 결심했습니다.'});
+      renderAwardsStep();
+      return;
+    }
+    else if(action==='retire-reduce-role'){
+      p.roleReduced=true; p.lowFormYears=0;
+      state.seasonFlow.reason=null; state.forcedRetireReason=null;
+      p.highlights.push({year:p.careerYears, text:'주전 자리에서 한 발 물러나 역할을 축소하는 대신, 선수 생활을 이어가기로 했습니다.'});
+      renderAwardsStep();
+      return;
+    }
     else if(action==='season-to-advance'){ finishSeasonFlow(); return; }
     else if(action==='ask-retire'){
       openConfirm('정말로 은퇴하시겠습니까? 이번 결정은 되돌릴 수 없습니다.', '은퇴하기', function(){
