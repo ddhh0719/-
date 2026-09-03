@@ -371,15 +371,11 @@
         <hr class="divider">
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
-          <label style="margin:0;">신인 능력치 배분</label>
+          <label style="margin:0;">신인 능력치</label>
           <span class="points-readout" id="alloc-readout" style="margin:0;"></span>
         </div>
-        <p class="lede" style="font-size:13px;margin-bottom:14px;">총 220포인트를 5개 능력치에 자유롭게 배분하세요. 신인은 아직 완성형이 아니라 각 능력치는 최대 70까지만 찍을 수 있고, 그 이상은 프로 무대에서의 활약과 훈련으로 직접 키워야 합니다.</p>
+        <p class="lede" style="font-size:13px;margin-bottom:14px;">모든 선수는 세부 능력치 50에서 동일하게 프로 생활을 시작합니다. 실제 재능(잠재력)은 감춰져 있으며, 어떤 능력치가 얼마나 자랄 수 있는지는 오직 프로 무대에서의 활약을 통해서만 드러납니다.</p>
         <div id="create-stats"></div>
-        <div class="btn-row" style="margin-bottom:8px;">
-          <button class="btn btn-outline" data-action="create-auto-allocate">균등 분배</button>
-          <button class="btn btn-outline" data-action="create-reset-allocate">초기화</button>
-        </div>
         <p class="lede" id="alloc-hint" style="font-size:13px;color:var(--danger);"></p>
 
         <div class="btn-row">
@@ -609,9 +605,10 @@
   var BATTER_SUBROLES = ['포수','1루수','2루수','3루수','유격수','좌익수','중견수','우익수'];
   var PITCHER_SUBROLES = ['선발','불펜','마무리'];
 
-  var STAT_FLOOR = 10;          // minimum any starting stat can be brought down to
-  var ALLOC_BUDGET = 200;       // total points a new player distributes across their 5 starting stats
-  var CREATE_STAT_CAP = 70;     // no stat can start above this — growth has to be earned in the pros
+  var STAT_FLOOR = 10;          // minimum any starting stat can be brought down to (legacy allocation constant, kept for old create-stat-dec math)
+  var ALLOC_BUDGET = 200;       // legacy manual-allocation budget — kept only so old create-* actions stay well-defined; no longer spent by the player
+  var CREATE_STAT_CAP = 70;     // legacy manual-allocation cap — no longer reachable now that every stat starts fixed
+  var START_STAT_FIXED = 50;    // (2026-09 redesign) every new player's 5 starting stats are now fixed here — no more manual allocation at creation. Differentiation instead comes entirely from potential grade + archetype + how you play the pros.
 
   /* ---------------- core formulas ---------------- */
   function overall(player){
@@ -636,7 +633,7 @@
 
   function freshAllocation(position){
     var stats={};
-    statList(position).forEach(function(s){ stats[s.key]=STAT_FLOOR; });
+    statList(position).forEach(function(s){ stats[s.key]=START_STAT_FIXED; });
     return stats;
   }
 
@@ -1852,6 +1849,21 @@
     if(arch.primary.indexOf(focusKey)>-1) return full;
     return Math.max(NON_FOCUS_STAT_CAP_MAX, full-6);
   }
+  // Growth focus is no longer a free per-season player choice (2026-09 redesign, per user
+  // request): the archetype picked at creation ("파워형", "이닝이터형" etc.) now permanently
+  // decides which stat(s) grow with the dedicated focus pass. A single-primary-stat archetype
+  // (파워형) locks onto that one stat for the whole career; a multi-primary archetype (컨택형,
+  // 커맨드형, 올라운드 etc.) rotates the dedicated pass evenly across its own primary stats one
+  // season at a time — still fully "그쪽 방향" growth, never touching a stat outside the chosen
+  // playstyle's identity. Recomputed at the start of every season (see startSeasonFlow) so it
+  // stays correct even if the archetype array order ever changes.
+  function autoAssignGrowthFocus(player){
+    var arch=archetypeInfo(player);
+    var primaries=(arch && arch.primary && arch.primary.length) ? arch.primary : statList(player.position).map(function(s){ return s.key; });
+    var idx=Math.max(0,(player.careerYears||1)-1) % primaries.length;
+    player.growthFocus=primaries[idx];
+    return player.growthFocus;
+  }
   // Qualitative stat-tier labels used everywhere a raw stat number used to be shown during a
   // career (creation-time allocation still shows exact numbers — that budget-spending screen
   // needs precision). Hiding the exact figure keeps a player's real ceiling a genuine mystery
@@ -1904,18 +1916,37 @@
   // "anchor to the player's own debut year" trick the military tournament cycles use, so this
   // still lines up with a real odd/even calendar year regardless of when a given save started.
   function isSecondDraftYear(year){ return ((year%2)+2)%2===1; }
-  // Debut OVR at creation is heavily bottlenecked by CREATE_STAT_CAP (70) and ALLOC_BUDGET —
-  // even a maximally lopsided allocation can only reach roughly the 45-62 range depending on
-  // position, so a raw "overall>=65" gate would send literally every new character to 2군
-  // regardless of how well they were built. Gating primarily on DRAFT ROUND (itself derived from
-  // the same creation stats via the HS season) and only using overall as a secondary check near
-  // that realistic ceiling keeps this proportionate: a clearly well-invested build (or a good
-  // draft slot) starts in 1군 like before, and it's the genuinely weak/late-round entries that
-  // actually see the 퓨처스리그 first.
-  function rollFuturesEntryLevel(overallAtDebut, drafted, round){
-    if(!drafted) return overallAtDebut>=45 ? '1군' : '2군';
-    if(round<=5) return '1군';
-    return overallAtDebut>=50 ? '1군' : '2군';
+  // 2026-09 redesign: every debut player now starts with identical fixed stats (all 50 —
+  // see START_STAT_FIXED), so raw overall can no longer tell prospects apart at all — literally
+  // everyone debuts at exactly the same overall regardless of build. Entry level is now gated by
+  // DRAFT ROUND (a real signal — the HS season that decided it still varies by luck/randomness)
+  // plus a small bonus for a strong hidden potential grade (scouts sometimes DO see a special
+  // talent even before pro stats exist). The default is still, deliberately, "almost everyone
+  // debuts in 2군" — 1군 debut is the rare exception, exactly as intended.
+  function rollFuturesEntryLevel(player, drafted, round){
+    if(!drafted) return '2군'; // 육성선수는 예외 없이 2군에서 시작
+    var grade=potentialGradeInfo(player);
+    var base = round===1 ? 0.10 : round===2 ? 0.05 : round<=5 ? 0.02 : 0.01;
+    var gradeBonus = grade.id==='A+' ? 0.15 : grade.id==='A' ? 0.06 : 0;
+    return Math.random() < clamp(base+gradeBonus, 0, 0.35) ? '1군' : '2군';
+  }
+  // Finer-grained "where do I actually stand right now" status than the raw 1군/2군 roster flag —
+  // shown in the hub so the player always knows whether they're a 2군 fringe prospect, a 2군
+  // regular, a 1군 bench piece, an everyday starter, or a bona fide superstar. Purely a display
+  // label derived from current overall; it never gates anything on its own (call-up/promotion
+  // logic lives in checkFuturesOutcome).
+  function rosterStatusLabel(player){
+    var ovr=overall(player);
+    if(player.rosterLevel==='2군'){
+      if(ovr>=58) return '2군 주전';
+      if(ovr>=48) return '2군 백업';
+      return '2군 후보';
+    }
+    if(ovr>=85) return '리그 정상급';
+    if(ovr>=75) return '팀 핵심 전력';
+    if(ovr>=65) return '1군 주전';
+    if(ovr>=55) return '1군 백업';
+    return '1군 신인';
   }
   // A 2군 season is simpler than a full KBO one: same stat->box-score formulas (퓨처스리그도
   // 결국 같은 야구니까), but no momentum/career-luck layering, no awards, no fan/salary impact,
@@ -1941,13 +1972,19 @@
   // a real 2차 드래프트year gives them a shot at a fresh team instead of an automatic end.
   function checkFuturesOutcome(player, futuresScore){
     var expected = expectedSeasonScore(player);
-    var calledUp = futuresScore >= expected*0.95;
+    // Two independent paths to a call-up (2026-09): a standout FUTURES season on its own merits,
+    // OR simply having grown into a solidly better player overall (overall>=60) regardless of how
+    // this one particular season went — so a slow, steady developer isn't stuck forever just
+    // because they never had one huge 퓨처스리그 year.
+    var calledUp = futuresScore >= expected*0.95 || overall(player)>=60;
     if(calledUp){
+      var firstDebut = !player.majorDebutYear;
       player.rosterLevel='1군';
       player.futuresYears=0;
       player.callUpHistory=(player.callUpHistory||[]);
       player.callUpHistory.push(player.careerYears);
-      return { outcome:'callup' };
+      if(firstDebut) player.majorDebutYear=player.careerYears;
+      return { outcome:'callup', firstDebut:firstDebut };
     }
     player.futuresYears=(player.futuresYears||0)+1;
     var stuck = player.futuresYears>=FUTURES_CALLUP_YEARS_LIMIT || player.age>=FUTURES_RELEASE_AGE;
@@ -1969,7 +2006,7 @@
   /* ================= Phase 15: rival player ================= */
   function rollRivalBias(){ return rand(-1,1); } // this career's rival starts consistently a bit above or below the player, kept for the whole career
   function createRival(player){
-    return { name:randomName(), position:player.position, bias:rollRivalBias(), scoreLog:[], careerScore:0, years:0 };
+    return { name:randomName(), position:player.position, subrole:player.subrole, bias:rollRivalBias(), scoreLog:[], lineLog:[], careerScore:0, years:0 };
   }
   // The rival is never actually simulated pitch-by-pitch — just given a plausible season score
   // each year, loosely tracking the PLAYER's own performance (so a great league-wide season for
@@ -1982,7 +2019,38 @@
     r.scoreLog.push(score);
     r.careerScore+=score;
     r.years+=1;
+    // 2026-09: a per-season stat line, so the rival reads as an actual competitor putting up
+    // real numbers each year instead of just an abstract cumulative score. rivalStatLine reuses
+    // expectedStatLine's deterministic formulas via the same score<->overall relationship
+    // expectedSeasonScore/computePerf already use, so it stays consistent with everything else
+    // without needing to actually simulate the rival's season pitch-by-pitch.
+    r.lastLine=rivalStatLine(r, score);
+    r.lineLog.push({year:player.careerYears, line:r.lastLine});
     return r;
+  }
+  function rivalStatLine(rival, score){
+    var ovrEquiv;
+    if(rival.position==='batter'){
+      ovrEquiv = 30 + (score-88)/1.80;
+    } else if(rival.subrole==='선발'){
+      ovrEquiv = 30 + (score-19)/2.66;
+    } else if(rival.subrole==='마무리'){
+      ovrEquiv = 30 + (score-12)/2.17;
+    } else {
+      ovrEquiv = 30 + (score-14)/2.11; // 불펜, and old saves with no subrole recorded
+    }
+    ovrEquiv = clamp(Math.round(ovrEquiv), 15, 99);
+    var synth = { position:rival.position, subrole:rival.subrole, isDH:false, stats:{} };
+    statList(rival.position).forEach(function(s){ synth.stats[s.key]=ovrEquiv; });
+    return expectedStatLine(synth);
+  }
+  function rivalLineSummary(rival){
+    var l=rival.lastLine;
+    if(!l) return '';
+    if(rival.position==='batter') return '타율 '+formatAvg(l.avg)+', 홈런 '+l.hr+'개, 타점 '+l.rbi+'개';
+    if(rival.subrole==='마무리') return '평균자책점 '+l.era.toFixed(2)+', 세이브 '+l.saves+'개';
+    if(rival.subrole==='불펜') return '평균자책점 '+l.era.toFixed(2)+', 홀드 '+l.holds+'개';
+    return '평균자책점 '+l.era.toFixed(2)+', '+l.wins+'승, 탈삼진 '+l.k+'개';
   }
 
   /* ================= Phase 15: perks ================= */
@@ -2030,6 +2098,122 @@
   ];
   function seasonChallengeInfo(tierId){
     return SEASON_CHALLENGES.filter(function(c){ return c.id===tierId; })[0] || SEASON_CHALLENGES[1];
+  }
+
+  // Concrete, personalized stat line a player of THIS quality would produce in an average
+  // season — the same underlying formulas as simulateBatterSeason/simulatePitcherSeason with
+  // every rand() term replaced by its central value. Season-challenge goals below are expressed
+  // as real, player-specific numbers ("타율 .282 이상") built from this instead of an abstract
+  // score ratio, so the goal is naturally different per player/archetype (a power hitter and a
+  // contact hitter get visibly different HR/AVG numbers) without any archetype-specific tables.
+  function expectedStatLine(player){
+    var s=player.stats;
+    if(player.position==='batter'){
+      var playShare=clamp(0.32+(overall(player)/99)*0.85,0.32,1.0);
+      var games=clamp(Math.round(144*playShare),15,144);
+      var ab=Math.round(games*3.65);
+      var avg=clamp(0.170+(s.contact/99)*0.125+eliteBonus(s.contact,0.020)+(s.speed/99)*0.025+(s.mental/99)*0.020,0.130,0.380);
+      var hrRate=Math.pow(s.power/99,1.3)*0.072*(0.86+0.14*(s.contact/99));
+      var hr=Math.round(ab*hrRate);
+      var h=Math.max(Math.round(ab*avg), hr);
+      var rbi=Math.round(hr*1.55+h*0.26+(s.power/99)*16+eliteBonus(s.power,18)+(s.mental/99)*6+7);
+      var speedFactor=clamp((s.speed*0.85+s.mental*0.15)/99,0,1);
+      var sb=Math.round(46*Math.pow(speedFactor,2.6)*(games/144));
+      return {games:games, avg:avg, hr:hr, rbi:rbi, sb:sb};
+    }
+    var isReliever=player.subrole==='불펜'||player.subrole==='마무리';
+    var ovr=overall(player);
+    var playShare2=clamp(0.32+(ovr/99)*0.85,0.32,1.0);
+    var gamesCount, ip;
+    if(isReliever){
+      gamesCount=Math.round((40+(s.stamina/99)*32)*playShare2);
+      ip=Math.round((gamesCount*(1.0+(s.stamina/99)*0.5))*10)/10;
+    } else {
+      gamesCount=Math.round((16+(s.stamina/99)*15)*playShare2);
+      ip=Math.round((gamesCount*(4.2+(s.stamina/99)*2.4))*10)/10;
+    }
+    var era=clamp(6.7-(s.control/99)*3.0-(s.breaking/99)*1.4-(s.velocity/99)*0.8-(s.mental/99)*0.5,1.4,9.5);
+    var k9=clamp(4.0+(s.velocity/99)*7.2+(s.breaking/99)*3.8,3,15.5);
+    var k=Math.round(ip/9*k9);
+    var winPct=clamp(0.5+(ovr-50)/220,0.10,0.88);
+    var wins, saves, holds;
+    if(player.subrole==='선발'){
+      var decisions=Math.round(gamesCount*0.62);
+      wins=Math.round(decisions*winPct); saves=0; holds=0;
+    } else if(player.subrole==='마무리'){
+      var saveRate=clamp(0.07+(ovr/99)*0.09,0.02,0.85);
+      saves=Math.round(gamesCount*saveRate);
+      wins=Math.min(8, Math.round(gamesCount*0.12*winPct*0.4));
+      holds=0;
+    } else {
+      var holdRate=clamp(0.08+(ovr/99)*0.15,0.03,0.68);
+      holds=Math.round(gamesCount*holdRate);
+      wins=Math.round(gamesCount*0.12*winPct*0.5);
+      saves=Math.round(gamesCount*0.05);
+    }
+    return {games:gamesCount, ip:ip, era:era, k:k, wins:wins, saves:saves, holds:holds};
+  }
+  // Season-challenge goals (Phase 15 redesign, 2026-09): "쉬움/보통/어려움" used to be an opaque
+  // score-ratio target the player couldn't see in concrete terms. Now each tier is a real,
+  // checkable stat line — one condition for 쉬움, two for 보통, three for 어려움 — sized off
+  // expectedStatLine so the numbers are honest to THIS player's current ability. Goal objects are
+  // plain data (min/max thresholds only, no closures) since they get snapshotted onto
+  // state.seasonFlow and must survive JSON save/load.
+  function computeSeasonChallengeGoals(player){
+    var line=expectedStatLine(player);
+    var r3=function(v){ return Math.round(v*1000)/1000; };
+    var r2=function(v){ return Math.round(v*100)/100; };
+    var atLeast1=function(v){ return Math.max(1,Math.round(v)); };
+    if(player.position==='batter'){
+      var avgE=line.avg, hrE=line.hr, rbiE=line.rbi;
+      return {
+        easy:  { label:'쉬움', desc:'타율 '+formatAvg(r3(avgE-0.020))+' 이상 달성',
+          avgMin:r3(avgE-0.020) },
+        normal:{ label:'보통', desc:'타율 '+formatAvg(r3(avgE))+' 이상 + 홈런 '+atLeast1(hrE*0.85)+'개 이상 달성',
+          avgMin:r3(avgE), hrMin:atLeast1(hrE*0.85) },
+        hard:  { label:'어려움', desc:'타율 '+formatAvg(r3(avgE+0.020))+' 이상 + 홈런 '+atLeast1(hrE*1.15)+'개 이상 + 타점 '+atLeast1(rbiE*1.05)+'개 이상 달성',
+          avgMin:r3(avgE+0.020), hrMin:atLeast1(hrE*1.15), rbiMin:atLeast1(rbiE*1.05) }
+      };
+    }
+    var eraE=line.era, kE=line.k, winsE=line.wins, savesE=line.saves, holdsE=line.holds, gamesE=line.games;
+    if(player.subrole==='마무리'){
+      return {
+        easy:  { label:'쉬움', desc:'평균자책점 '+r2(eraE+0.50)+' 이하 달성', eraMax:r2(eraE+0.50) },
+        normal:{ label:'보통', desc:'평균자책점 '+r2(eraE+0.15)+' 이하 + 세이브 '+atLeast1(savesE*0.85)+'개 이상 달성',
+          eraMax:r2(eraE+0.15), savesMin:atLeast1(savesE*0.85) },
+        hard:  { label:'어려움', desc:'평균자책점 '+r2(eraE-0.20)+' 이하 + 세이브 '+atLeast1(savesE*1.15)+'개 이상 달성',
+          eraMax:r2(eraE-0.20), savesMin:atLeast1(savesE*1.15) }
+      };
+    }
+    if(player.subrole==='불펜'){
+      return {
+        easy:  { label:'쉬움', desc:'평균자책점 '+r2(eraE+0.50)+' 이하 달성', eraMax:r2(eraE+0.50) },
+        normal:{ label:'보통', desc:'평균자책점 '+r2(eraE+0.15)+' 이하 + 홀드 '+atLeast1(holdsE*0.85)+'개 이상 달성',
+          eraMax:r2(eraE+0.15), holdsMin:atLeast1(holdsE*0.85) },
+        hard:  { label:'어려움', desc:'평균자책점 '+r2(eraE-0.20)+' 이하 + 홀드 '+atLeast1(holdsE*1.15)+'개 이상 + 등판 '+atLeast1(gamesE*0.9)+'경기 이상 달성',
+          eraMax:r2(eraE-0.20), holdsMin:atLeast1(holdsE*1.15), gamesMin:atLeast1(gamesE*0.9) }
+      };
+    }
+    // 선발
+    return {
+      easy:  { label:'쉬움', desc:'평균자책점 '+r2(eraE+0.50)+' 이하 달성', eraMax:r2(eraE+0.50) },
+      normal:{ label:'보통', desc:'평균자책점 '+r2(eraE+0.15)+' 이하 + 탈삼진 '+atLeast1(kE*0.85)+'개 이상 달성',
+        eraMax:r2(eraE+0.15), kMin:atLeast1(kE*0.85) },
+      hard:  { label:'어려움', desc:'평균자책점 '+r2(eraE-0.20)+' 이하 + 탈삼진 '+atLeast1(kE*1.15)+'개 이상 + 승 '+atLeast1(winsE*1.1)+'승 이상 달성',
+        eraMax:r2(eraE-0.20), kMin:atLeast1(kE*1.15), winsMin:atLeast1(winsE*1.1) }
+    };
+  }
+  function evalChallengeGoal(goal, line){
+    if(goal.avgMin!==undefined && line.avg<goal.avgMin) return false;
+    if(goal.hrMin!==undefined && line.hr<goal.hrMin) return false;
+    if(goal.rbiMin!==undefined && line.rbi<goal.rbiMin) return false;
+    if(goal.eraMax!==undefined && line.era>goal.eraMax) return false;
+    if(goal.kMin!==undefined && line.k<goal.kMin) return false;
+    if(goal.winsMin!==undefined && line.wins<goal.winsMin) return false;
+    if(goal.savesMin!==undefined && line.saves<goal.savesMin) return false;
+    if(goal.holdsMin!==undefined && (line.holds||0)<goal.holdsMin) return false;
+    if(goal.gamesMin!==undefined && line.games<goal.gamesMin) return false;
+    return true;
   }
 
   /* ================= Phase 15: Legacy Score ================= */
@@ -2103,7 +2287,11 @@
   // Tiny inline SVG hexagon radar chart — no charting library needed. `axes` is an array of
   // {label, value} with value already 0-100 normalized.
   function renderRadarSvg(axes){
-    var cx=110, cy=110, r=88;
+    // 2026-09 fix: labels near the horizontal extremes were overflowing the old
+    // 220x235 viewBox (which clips by default), slicing off trailing/leading
+    // glyphs and rendering as garbled characters. Wider canvas + outward
+    // text-anchor per side keeps every label's full text inside the box.
+    var cx=170, cy=120, r=78;
     var n=axes.length;
     var pts=axes.map(function(a, i){
       var ang=-Math.PI/2 + i*(2*Math.PI/n);
@@ -2120,11 +2308,13 @@
     }).join('');
     var labels=axes.map(function(a, i){
       var ang=-Math.PI/2 + i*(2*Math.PI/n);
-      var lx=cx+(r+22)*Math.cos(ang), ly=cy+(r+22)*Math.sin(ang);
-      return '<text x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" font-size="11" text-anchor="middle" fill="currentColor">'+esc(a.label)+'</text>'+
-        '<text x="'+lx.toFixed(1)+'" y="'+(ly+13).toFixed(1)+'" font-size="11" font-weight="700" text-anchor="middle" fill="var(--accent,#3b6fd6)">'+Math.round(a.value)+'</text>';
+      var cosA=Math.cos(ang);
+      var anchor = cosA>0.15 ? 'start' : (cosA<-0.15 ? 'end' : 'middle');
+      var lx=cx+(r+16)*cosA, ly=cy+(r+16)*Math.sin(ang);
+      return '<text x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" font-size="11" text-anchor="'+anchor+'" fill="currentColor">'+esc(a.label)+'</text>'+
+        '<text x="'+lx.toFixed(1)+'" y="'+(ly+13).toFixed(1)+'" font-size="11" font-weight="700" text-anchor="'+anchor+'" fill="var(--accent,#3b6fd6)">'+Math.round(a.value)+'</text>';
     }).join('');
-    return '<svg viewBox="0 0 220 235" style="width:100%;max-width:280px;display:block;margin:0 auto;">'+
+    return '<svg viewBox="0 0 340 260" style="width:100%;max-width:360px;display:block;margin:0 auto;">'+
       rings+'<polygon points="'+poly+'" fill="var(--accent,#3b6fd6)" fill-opacity="0.28" stroke="var(--accent,#3b6fd6)" stroke-width="2"/>'+
       labels+'</svg>';
   }
@@ -4022,48 +4212,27 @@
     }
 
     var pos=c.position||'batter';
-    if(!c.stats){ c.stats=freshAllocation(pos); c.remaining=ALLOC_BUDGET; }
+    if(!c.stats){ c.stats=freshAllocation(pos); c.remaining=0; }
 
-    var fakePlayer={position:pos, subrole:c.subrole, stats:c.stats};
-    var ovr=overall(fakePlayer);
-    $('#alloc-readout').innerHTML='잔여 포인트 <b>'+c.remaining+'</b> / '+ALLOC_BUDGET;
+    $('#alloc-readout').innerHTML = c.position ? ('종합능력치 <b>'+START_STAT_FIXED+'</b>로 시작') : '';
 
     var html = '';
     if(c.position){
       var archList=archetypesFor(c.position);
       if(!c.archetype) c.archetype=archList[0].id;
       html += '<div class="stat-row-top" style="margin-bottom:6px;"><span class="stat-name">플레이 스타일</span></div>'+
-        '<div class="chip-row" style="flex-wrap:wrap;margin-bottom:16px;">'+
+        '<div class="chip-row" style="flex-wrap:wrap;margin-bottom:10px;">'+
           archList.map(function(a){
             return '<button type="button" class="chip'+(c.archetype===a.id?' selected':'')+'" data-action="choose-archetype" data-arch="'+a.id+'" title="'+esc(a.desc)+'">'+esc(a.label)+'</button>';
           }).join('')+
-        '</div>';
+        '</div>'+
+        '<p class="lede" style="font-size:13px;">선택한 플레이 스타일에 따라 프로 데뷔 후 집중적으로 성장하는 능력치가 자동으로 정해집니다 — 별도로 훈련 방향을 매 시즌 고를 필요는 없습니다.</p>';
     }
-    html += '<div class="stat-value" style="margin-bottom:14px;">현재 종합능력치 <b>'+ovr+'</b></div>';
-    html += statList(pos).map(function(s){
-      var v=c.stats[s.key];
-      var cap=CREATE_STAT_CAP;
-      var atCap = v>=cap;
-      var atFloor = v<=STAT_FLOOR;
-      return (
-        '<div class="stat-row">'+
-          '<div class="stat-row-top"><span class="stat-name">'+s.label+'</span><span class="stat-value"><b>'+v+'</b> / 99 <span style="opacity:.7">(신인 한계 '+cap+')</span></span></div>'+
-          '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div><div class="stat-cap" style="left:'+cap+'%"></div></div>'+
-          '<div class="stat-adjust">'+
-            '<button type="button" class="adjust-btn" data-action="create-stat-dec" data-stat="'+s.key+'" data-step="10" '+(atFloor?'disabled':'')+'>−10</button>'+
-            '<button type="button" class="adjust-btn" data-action="create-stat-dec" data-stat="'+s.key+'" data-step="1" '+(atFloor?'disabled':'')+'>−</button>'+
-            '<button type="button" class="adjust-btn" data-action="create-stat-inc" data-stat="'+s.key+'" data-step="1" '+((c.remaining<=0||atCap)?'disabled':'')+'>+</button>'+
-            '<button type="button" class="adjust-btn" data-action="create-stat-inc" data-stat="'+s.key+'" data-step="10" '+((c.remaining<=0||atCap)?'disabled':'')+'>+10</button>'+
-            (atCap?'<span class="stat-value" style="font-size:12px;">신인 한계</span>':'')+
-          '</div>'+
-        '</div>'
-      );
-    }).join('');
     $('#create-stats').innerHTML=html;
 
-    $('#alloc-hint').textContent = c.remaining>0 ? ('아직 '+c.remaining+'포인트가 남아 있어요. 모두 배분해야 다음 단계로 진행할 수 있어요.') : '';
+    $('#alloc-hint').textContent = '';
 
-    $('#btn-confirm-create').disabled = !(c.name && c.name.trim().length>0 && c.position && c.remaining===0);
+    $('#btn-confirm-create').disabled = !(c.name && c.name.trim().length>0 && c.position);
   }
 
   /* ---- high school ---- */
@@ -4128,6 +4297,27 @@
     }
   }
 
+  /* ---- debut announce (2026-09) ---- */
+  // Shown once, right after character creation resolves into a team — a season-modal overlay
+  // (same reusable openSeasonModal/closeSeasonModal pattern as the futures call-up report) on
+  // top of the hub, rather than its own screen, so the underlying state.screen transition stays
+  // exactly what it always was (straight to 'hub') and every existing season-flow/test script
+  // that drives sign-developmental/start-pro-career keeps working unchanged.
+  function showDebutAnnounceModal(p){
+    var isMajor = p.rosterLevel==='1군';
+    var html = '<div class="eyebrow">프로 데뷔</div><h2>'+(isMajor?'1군으로 데뷔합니다!':'2군으로 데뷔합니다')+'</h2>'+
+      '<p class="lede">'+esc(p.team?p.team.name:'소속팀')+'과 함께하는 '+esc(p.name)+'의 프로 커리어가 시작됩니다.</p>'+
+      (isMajor
+        ? '<p class="lede">뛰어난 잠재력을 인정받아 곧바로 1군 무대에서 프로 생활을 시작하는, 아주 드문 케이스입니다.</p>'
+        : '<p class="lede">대부분의 신인 선수들처럼 퓨처스리그(2군)에서 실력을 증명하며 1군 콜업을 노리게 됩니다.</p>')+
+      '<div class="stat-line-grid" style="margin-top:14px;">'+
+        '<div class="stat-line-cell"><div class="v">'+overall(p)+'</div><div class="l">종합 능력치</div></div>'+
+        '<div class="stat-line-cell"><div class="v">'+esc(rosterStatusLabel(p))+'</div><div class="l">현재 위치</div></div>'+
+      '</div>'+
+      '<div class="btn-row"><button class="btn btn-primary" data-action="close-debut-announce">시즌 준비하러 가기</button></div>';
+    openSeasonModal(html);
+  }
+
   /* ---- hub ---- */
   function renderHub(){
     var p=state.player;
@@ -4143,6 +4333,7 @@
       '</div>'+
       '<div class="ovr-badge"><span class="n">'+ovr+'</span><span class="l">종합</span></div>'+
       '<div class="pc-meta">'+
+        '<div><span>현재 위치</span><span>'+esc(rosterStatusLabel(p))+'</span></div>'+
         '<div><span>소속</span><span>'+esc(p.team?p.team.name:'무소속')+(p.rosterLevel==='2군'?' (퓨처스리그)':'')+'</span></div>'+
         '<div><span>나이</span><span>만 '+p.age+'세</span></div>'+
         '<div><span>연차</span><span>프로 '+p.careerYears+'년차</span></div>'+
@@ -4152,15 +4343,6 @@
         (p.teamRank ? '<div><span>팀 순위</span><span>'+p.teamRank+'위 ('+p.teamRecord.wins+'승 '+p.teamRecord.losses+'패)</span></div>' : '')+
       '</div>'+
       '<div class="stat-track" style="margin:-10px 0 18px;"><div class="stat-fill" style="width:'+fa+'%;background:linear-gradient(90deg,var(--danger),var(--accent),var(--turf));"></div></div>'+
-      statList(p.position).map(function(s){
-        var v=p.stats[s.key];
-        return (
-          '<div class="stat-row">'+
-            '<div class="stat-row-top"><span class="stat-name">'+s.label+'</span><span class="stat-value">'+statTierLabel(v)+'</span></div>'+
-            '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div></div>'+
-          '</div>'
-        );
-      }).join('') +
       '<button class="btn btn-danger" style="width:100%;margin-top:10px;" data-action="ask-retire">은퇴 상담</button>';
 
     $('#tab-player').classList.toggle('hidden', state.hubTab!=='player');
@@ -4177,26 +4359,23 @@
   function renderTabTraining(){
     var p=state.player;
     var stats=statList(p.position);
+    var arch=archetypeInfo(p);
+    var primaries=(arch && arch.primary && arch.primary.length) ? arch.primary : stats.map(function(s){ return s.key; });
+    var focusIdx=Math.max(0,(p.careerYears||1)-1) % primaries.length;
+    var focusKey=primaries[focusIdx];
+    var focusLabel=(stats.filter(function(s){ return s.key===focusKey; })[0]||{}).label || focusKey;
     var html = '<div class="eyebrow">'+p.careerYears+'년차 시즌 준비</div>'+
-      '<h2>성장 포커스를 선택하세요</h2>'+
-      '<p class="lede" style="font-size:13px;">능력치는 더 이상 저절로 오르지 않습니다 — 이번 시즌 활약과 이벤트 선택에 따라 성장합니다. 아래에서 중점적으로 키우고 싶은 능력치를 고르면, 그 능력치가 성장할 확률이 높아집니다.</p>';
+      '<h2>시즌 준비</h2>'+
+      '<p class="lede" style="font-size:13px;">세부 능력치는 더 이상 직접 고를 수 없습니다 — 이번 시즌 활약과 이벤트 선택에 따라 자동으로 성장하며, 선택한 플레이 스타일('+esc(arch?arch.label:'')+')에 맞는 방향으로 집중적으로 커집니다.</p>';
 
-    html += '<div class="chip-row" style="margin:14px 0 18px;flex-wrap:wrap;">'+
-      '<button type="button" class="chip'+(!p.growthFocus?' selected':'')+'" data-action="set-growth-focus" data-stat="">균형 성장</button>'+
-      stats.map(function(s){
-        return '<button type="button" class="chip'+(p.growthFocus===s.key?' selected':'')+'" data-action="set-growth-focus" data-stat="'+s.key+'">'+s.label+' 집중</button>';
-      }).join('')+
-    '</div>';
-
-    html += stats.map(function(s){
-      var v=p.stats[s.key];
-      return (
-        '<div class="stat-row">'+
-          '<div class="stat-row-top"><span class="stat-name">'+s.label+(p.growthFocus===s.key?' <span style="color:var(--accent);">★</span>':'')+'</span><span class="stat-value">'+statTierLabel(v)+'</span></div>'+
-          '<div class="stat-track"><div class="stat-fill" style="width:'+v+'%"></div></div>'+
-        '</div>'
-      );
-    }).join('');
+    html += '<div class="stat-line-grid" style="margin:14px 0 18px;">'+
+      '<div class="stat-line-cell"><div class="v">'+overall(p)+'</div><div class="l">종합 능력치</div></div>'+
+      '<div class="stat-line-cell"><div class="v">'+esc(focusLabel)+'</div><div class="l">이번 시즌 집중 성장</div></div>'+
+    '</div>'+
+    (primaries.length>1 ? '<p class="lede" style="font-size:12px;">'+esc(arch.label)+' 유형은 ['+primaries.map(function(k){
+      var lbl=(stats.filter(function(s){ return s.key===k; })[0]||{}).label || k;
+      return k===focusKey ? '<b style="color:var(--accent);">'+esc(lbl)+'</b>' : esc(lbl);
+    }).join(' → ')+'] 순서로 매 시즌 돌아가며 집중 성장합니다.</p>' : '');
 
     if(militaryUnresolved(p) && p.age<MILITARY_FORCE_AGE){
       html += '<p class="lede" style="font-size:13px;">병역: '+militaryStatusLabel(p)+'. 아시안게임 금메달이나 올림픽 메달로 면제받거나, 원하는 시점에 상무에 조기 입대할 수 있습니다.</p>'+
@@ -4209,13 +4388,17 @@
 
     if(p.rosterLevel!=='2군'){
       if(!p.pendingChallengeTier) p.pendingChallengeTier='normal';
+      // 2026-09 redesign: goals are concrete, personalized stat-line targets (computed from this
+      // player's own expected season — see expectedStatLine/computeSeasonChallengeGoals) instead
+      // of an abstract score ratio, so the chips read as "타율 .285 이상" rather than "75%".
+      var goals=computeSeasonChallengeGoals(p);
       html += '<hr class="divider"><h3 style="font-size:15px;">이번 시즌 목표 난이도</h3>'+
         '<div class="chip-row" style="flex-wrap:wrap;margin-bottom:6px;">'+
           SEASON_CHALLENGES.map(function(c){
-            return '<button type="button" class="chip'+(p.pendingChallengeTier===c.id?' selected':'')+'" data-action="set-challenge-tier" data-tier="'+c.id+'">'+c.label+'</button>';
+            return '<button type="button" class="chip'+(p.pendingChallengeTier===c.id?' selected':'')+'" data-action="set-challenge-tier" data-tier="'+c.id+'">'+goals[c.id].label+'</button>';
           }).join('')+
         '</div>'+
-        '<p class="lede" style="font-size:12px;">'+esc(seasonChallengeInfo(p.pendingChallengeTier).desc)+'</p>';
+        '<p class="lede" style="font-size:12px;">'+esc(goals[p.pendingChallengeTier].desc)+' (성공 시 성장 보너스 '+seasonChallengeInfo(p.pendingChallengeTier).successRewardGrowth+'단계'+(seasonChallengeInfo(p.pendingChallengeTier).failPenalty?', 실패 시 페널티 있음':'')+')</p>';
     }
 
     html += '<div class="btn-row">'+
@@ -4290,7 +4473,8 @@
         '</tbody></table></div>';
     }
 
-    // Rival comparison (Phase 15)
+    // Rival comparison (Phase 15; 2026-09: added a real per-season stat line + history table so
+    // the rival reads as an actual competitor, not just a cumulative score readout)
     if(p.rival && p.rival.scoreLog.length){
       var aheadOfRival = p.careerScore>=p.rival.careerScore;
       html += '<hr class="divider"><h3 style="font-size:17px;">라이벌 비교 — '+esc(p.rival.name)+'</h3>'+
@@ -4298,7 +4482,22 @@
           '<div class="stat-line-cell"><div class="v">'+Math.round(p.careerScore||0)+'</div><div class="l">내 커리어 점수</div></div>'+
           '<div class="stat-line-cell"><div class="v">'+Math.round(p.rival.careerScore||0)+'</div><div class="l">'+esc(p.rival.name)+' 커리어 점수</div></div>'+
         '</div>'+
-        '<p class="lede" style="font-size:13px;">'+(aheadOfRival ? '현재 라이벌보다 앞서 있습니다.' : '현재 라이벌에게 뒤처지고 있습니다.')+'</p>';
+        '<p class="lede" style="font-size:13px;">'+(aheadOfRival ? '현재 라이벌보다 앞서 있습니다.' : '현재 라이벌에게 뒤처지고 있습니다.')+
+        (p.rival.lastLine ? ' '+esc(p.rival.name)+'의 최근 시즌 성적 — '+rivalLineSummary(p.rival) : '')+'</p>';
+      if(p.rival.lineLog && p.rival.lineLog.length){
+        html += '<div class="table-wrap"><table><thead><tr><th>연차</th>'+
+          (p.rival.position==='batter' ? '<th>타율</th><th>홈런</th><th>타점</th>' : '<th>평균자책</th><th>승</th><th>탈삼진</th>')+
+          '</tr></thead><tbody>'+
+          p.rival.lineLog.slice().reverse().slice(0,10).map(function(row){
+            var l=row.line;
+            return '<tr><td>'+row.year+'</td>'+
+              (p.rival.position==='batter'
+                ? '<td>'+formatAvg(l.avg)+'</td><td>'+l.hr+'</td><td>'+l.rbi+'</td>'
+                : '<td>'+l.era.toFixed(2)+'</td><td>'+l.wins+'</td><td>'+l.k+'</td>')+
+              '</tr>';
+          }).join('')+
+          '</tbody></table></div>';
+      }
     }
 
     html += renderAchievementsBlock(p);
@@ -4490,6 +4689,7 @@
     var p=state.player;
     state.forcedRetireReason=null;
     initMilitaryFields(p);
+    autoAssignGrowthFocus(p);
     if(p.militaryServing){
       runMilitaryServiceSeason();
       return;
@@ -4502,11 +4702,12 @@
     var tournamentEvent=buildMilitaryTournamentEvent(p);
     if(tournamentEvent) events=[tournamentEvent].concat(events);
     var tier=p.pendingChallengeTier||'normal';
+    var challengeGoal=computeSeasonChallengeGoals(p)[tier];
     state.seasonFlow={
       step:'events', events:events, eventIndex:0, resolvedNarratives:[],
       ctx:{ statBoost:{}, injuryRiskDelta:(tier==='hard'?0.05:0), lineBoost:{} },
       line:null, awards:[], seasonScoreVal:0, perf:0, teamOffer:0, reason:null,
-      challengeTier:tier
+      challengeTier:tier, challengeGoal:challengeGoal
     };
     if(events.length===0){ finalizeSeasonEvents(); }
     else { renderEventStep(); }
@@ -4542,7 +4743,9 @@
     }
     var msg='', btnLabel='다음 시즌으로', danger=false;
     if(outcome.outcome==='callup'){
-      msg='좋은 활약으로 1군 콜업 통보를 받았습니다! 내년부터 '+(p.team?esc(p.team.name):'소속팀')+'의 1군 백업 명단에 이름을 올립니다.';
+      msg = outcome.firstDebut
+        ? '꿈에 그리던 1군 데뷔를 확정지었습니다! 내년부터 '+(p.team?esc(p.team.name):'소속팀')+'의 1군에서 뛰게 됩니다.'
+        : '좋은 활약으로 다시 1군 콜업 통보를 받았습니다! 내년부터 '+(p.team?esc(p.team.name):'소속팀')+'의 1군 명단에 이름을 올립니다.';
     } else if(outcome.outcome==='stay'){
       msg='아직은 퓨처스리그에서 조금 더 경쟁력을 증명해야 할 시즌이었습니다.';
     } else if(outcome.outcome==='seconddraft'){
@@ -4713,13 +4916,15 @@
     // Rival (Phase 15) — never simulated play-by-play, just a loosely-linked season score.
     advanceRival(p, awardScore);
 
-    // Season challenge (Phase 15) — resolved against this season's actual output now that
-    // awardScore/expectedSeasonScore are both known.
+    // Season challenge (Phase 15, redesigned 2026-09) — resolved against a concrete, personalized
+    // stat-line goal (frozen on state.seasonFlow at season start by computeSeasonChallengeGoals)
+    // instead of an abstract score ratio, so the player always knew exactly what "타율 .285 이상"
+    // etc meant when they picked the tier. challengeTierInfo still comes from the (unrelated)
+    // SEASON_CHALLENGES array purely for its reward/penalty economics (successRewardGrowth).
     var challengeResult=null, challengeTierInfo=null;
-    if(sf.challengeTier){
+    if(sf.challengeTier && sf.challengeGoal){
       challengeTierInfo=seasonChallengeInfo(sf.challengeTier);
-      var challengeTarget=expectedSeasonScore(p)*challengeTierInfo.targetMult;
-      challengeResult={ tier:sf.challengeTier, success:awardScore>=challengeTarget };
+      challengeResult={ tier:sf.challengeTier, success:evalChallengeGoal(sf.challengeGoal, line), goal:sf.challengeGoal };
       if(challengeResult.tier==='hard' && !challengeResult.success){
         p.momentum=clamp((p.momentum||0)-0.15, -1, 1);
         adjustFan(p, -8);
@@ -4747,10 +4952,10 @@
       var myTotal=p.careerScore, rivalTotal=p.rival.careerScore;
       if(p.rival.scoreLog.length===1) hi.push('올해 데뷔한 라이벌 '+p.rival.name+'과(와)의 커리어 비교가 시작됩니다.');
       else hi.push(myTotal>=rivalTotal ? '커리어 누적 성적에서 라이벌 '+p.rival.name+'을(를) 앞서고 있습니다.' : '커리어 누적 성적에서 라이벌 '+p.rival.name+'에게 뒤처지고 있습니다.');
+      if(p.rival.lastLine) hi.push('라이벌 '+p.rival.name+'의 이번 시즌 성적 — '+rivalLineSummary(p.rival));
     }
     if(challengeResult){
-      var tierLabel=challengeTierInfo.label;
-      hi.push(challengeResult.success ? '이번 시즌 목표(난이도: '+tierLabel+')를 달성했습니다!' : '이번 시즌 목표(난이도: '+tierLabel+')는 달성하지 못했습니다.');
+      hi.push(challengeResult.success ? '이번 시즌 목표('+challengeResult.goal.desc+')를 달성했습니다!' : '이번 시즌 목표('+challengeResult.goal.desc+')는 달성하지 못했습니다.');
     }
     // Narrative feedback on a momentum swing, only when it actually CROSSES into/out of a hot or
     // cold state (not every single season it stays there) so the highlight log doesn't spam the
@@ -5243,43 +5448,22 @@
     else if(action==='random-name'){ c.name=randomName(); }
     else if(action==='choose-position'){
       c.position=el.getAttribute('data-pos');
-      c.subrole=null; c.stats=null; c.remaining=ALLOC_BUDGET;
+      c.subrole=null; c.stats=freshAllocation(c.position); c.remaining=0;
     }
     else if(action==='choose-subrole'){ c.subrole=el.getAttribute('data-sub'); }
     else if(action==='choose-archetype'){ c.archetype=el.getAttribute('data-arch'); }
-    else if(action==='create-stat-inc'){
-      var incKey=el.getAttribute('data-stat');
-      var incStep=parseInt(el.getAttribute('data-step')||'1',10);
-      var incCap=CREATE_STAT_CAP;
-      var incActual=Math.min(incStep, c.remaining, incCap-c.stats[incKey]);
-      if(incActual>0){ c.stats[incKey]+=incActual; c.remaining-=incActual; }
+    else if(action==='create-stat-inc' || action==='create-stat-dec'){
+      // 2026-09 redesign: every new player's 5 starting stats are fixed at START_STAT_FIXED —
+      // there is no more manual allocation, so these are permanently no-ops. Kept (rather than
+      // removed) only so old automated test scripts that still call them keep working harmlessly.
     }
-    else if(action==='create-stat-dec'){
-      var decKey=el.getAttribute('data-stat');
-      var decStep=parseInt(el.getAttribute('data-step')||'1',10);
-      var decActual=Math.min(decStep, c.stats[decKey]-STAT_FLOOR);
-      if(decActual>0){ c.stats[decKey]-=decActual; c.remaining+=decActual; }
-    }
-    else if(action==='create-auto-allocate'){
-      var allocKeys=statList(c.position).map(function(s){ return s.key; });
-      var guard=0;
-      while(c.remaining>0 && guard<5000){
-        guard+=1;
-        var progressed=false;
-        for(var ai=0;ai<allocKeys.length;ai++){
-          var ak=allocKeys[ai];
-          var acap=CREATE_STAT_CAP;
-          if(c.remaining>0 && c.stats[ak]<acap){ c.stats[ak]+=1; c.remaining-=1; progressed=true; }
-        }
-        if(!progressed) break;
-      }
-    }
-    else if(action==='create-reset-allocate'){
+    else if(action==='create-auto-allocate' || action==='create-reset-allocate'){
       c.stats=freshAllocation(c.position);
-      c.remaining=ALLOC_BUDGET;
+      c.remaining=0;
     }
     else if(action==='confirm-create'){
-      if(!c.name || !c.position || c.remaining!==0) return;
+      if(!c.name || !c.position) return;
+      if(!c.stats) c.stats=freshAllocation(c.position);
       if(!c.subrole) c.subrole = (c.position==='batter'?BATTER_SUBROLES:PITCHER_SUBROLES)[0];
       if(!c.archetype) c.archetype = archetypesFor(c.position)[0].id;
       state.player={
@@ -5311,25 +5495,36 @@
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
       p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
       initMilitaryFields(p);
-      p.rosterLevel=rollFuturesEntryLevel(overall(p), false, 99);
+      p.rosterLevel=rollFuturesEntryLevel(p, false, 99);
+      if(p.rosterLevel==='1군') p.majorDebutYear=p.careerYears;
       state.screen='hub'; state.hubTab='player';
       saveGame();
+      render();
+      showDebutAnnounceModal(p);
+      return;
     }
     else if(action==='start-pro-career'){
       p.team=state.draftResult.team;
       p.salary=startingSalary(state.draftResult);
       p.draftInfo=state.draftResult;
       p.age=19; p.careerYears=1; p.teamTenureYears=0;
-      p.rosterLevel=rollFuturesEntryLevel(overall(p), true, state.draftResult.round);
+      p.rosterLevel=rollFuturesEntryLevel(p, true, state.draftResult.round);
+      if(p.rosterLevel==='1군') p.majorDebutYear=p.careerYears;
       p.totalEarnings=(p.totalEarnings||0)+(state.draftResult.bonus||0);
       p.debutYear=rollMilitaryDebutYear(); // anchors the military tournament cycle to a real year, randomized per player so some careers get 3 tournament shots before 28 and others only 2
       initMilitaryFields(p);
       state.screen='hub'; state.hubTab='player';
       saveGame();
+      render();
+      showDebutAnnounceModal(p);
+      return;
     }
+    else if(action==='close-debut-announce'){ closeSeasonModal(); }
     else if(action==='switch-tab'){ state.hubTab=el.getAttribute('data-tab'); }
     else if(action==='set-growth-focus'){
-      p.growthFocus = el.getAttribute('data-stat') || null;
+      // 2026-09: growth focus is now fully automatic (autoAssignGrowthFocus, driven by the
+      // player's archetype) — this branch is a permanent no-op kept only so old test/driver
+      // scripts that still send this action don't error; the manual chip UI has been removed.
     }
     else if(action==='set-challenge-tier'){
       p.pendingChallengeTier = el.getAttribute('data-tier') || 'normal';
